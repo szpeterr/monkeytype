@@ -1,105 +1,126 @@
-import { createEffect, createResource, For, JSXElement, Show } from "solid-js";
-import "./AboutPage.scss";
-import { Button } from "../common/Button";
-import { showModal } from "../../stores/modals";
+import { useQuery } from "@tanstack/solid-query";
+import { For, JSXElement } from "solid-js";
+
+import {
+  getContributorsQueryOptions,
+  getSpeedHistogramQueryOptions,
+  getSupportersQueryOptions,
+  getTypingStatsQueryOptions,
+} from "../../queries/public";
+import { getActivePage } from "../../states/core";
+import { showModal } from "../../states/modals";
+import { getTheme } from "../../states/theme";
+import { getNumberWithMagnitude } from "../../utils/numbers";
+import { Advertisement } from "../common/Advertisement";
 import AsyncContent from "../common/AsyncContent";
-import { getActivePage } from "../../signals/core";
-import { getAds } from "../../signals/config";
-import { getContributorsList, getSupportersList } from "../../utils/json-data";
-import Ape from "../../ape";
-import { intervalToDuration } from "date-fns";
-import { getNumberWithMagnitude, numberWithSpaces } from "../../utils/numbers";
+import { Button } from "../common/Button";
 import { ChartJs } from "../common/ChartJs";
-import { getThemeColors } from "../../signals/theme";
+import { H2, H3 } from "../common/Headers";
+import { Page } from "../common/Page";
+import { CommandlineHotkey } from "../hotkeys/CommandlineHotkey";
+import { QuickRestartHotkey } from "../hotkeys/QuickRestartHotkey";
 
 export function AboutPage(): JSXElement {
-  const isOpen = (): boolean => getActivePage() === "about";
-  const [contributors] = createResource(isOpen, async (open) =>
-    open ? await getContributorsList() : undefined,
-  );
-  const [supporters] = createResource(isOpen, async (open) =>
-    open ? await getSupportersList() : undefined,
-  );
+  const isOpen = () => getActivePage() === "about";
 
-  const [typingStats] = createResource(isOpen, async (open) =>
-    open ? await fetchTypingStats() : undefined,
-  );
+  const contributors = useQuery(() => ({
+    ...getContributorsQueryOptions(),
+    enabled: isOpen(),
+  }));
 
-  const [speedHistogram] = createResource(isOpen, async (open) =>
-    open ? await fetchSpeedHistogram() : undefined,
-  );
+  const supporters = useQuery(() => ({
+    ...getSupportersQueryOptions(),
+    enabled: isOpen(),
+  }));
 
-  createEffect(() => {
-    console.log(getThemeColors());
-  });
+  const typingStats = useQuery(() => ({
+    ...getTypingStatsQueryOptions(),
+    enabled: isOpen(),
+  }));
+
+  const speedHistogram = useQuery(() => ({
+    ...getSpeedHistogramQueryOptions(),
+    enabled: isOpen(),
+  }));
+
+  const numberOfHistogramRecords = (data?: { y: number }[]) => {
+    if (data === undefined) return "";
+    const sum = getNumberWithMagnitude(
+      data.reduce((sum, it) => (sum += it.y), 0),
+    );
+    return `${sum.roundedTo2} ${sum.orderOfMagnitude}`;
+  };
 
   return (
-    <Show when={isOpen}>
-      <div class="created">
-        Created with love by Miodec.
-        <br />
-        <a href="#supporters_title">Supported</a> and{" "}
-        <a href="#contributors_title">expanded</a> by many awesome people.
-        <br />
-        Launched on 15th of May, 2020.
-      </div>
-      <div class="section histogramChart">
-        <AsyncContent
-          alwaysShowContent
-          resource={typingStats}
-          errorMessage="Failed to get global typing stats"
-        >
-          {(data) => (
-            <div class="triplegroup">
-              <div
-                class="group"
-                aria-label={data?.testsStarted.label}
-                data-balloon-pos="up"
-              >
-                <div class="label">total tests started</div>
-                <div class="val">{data?.testsStarted.text ?? "-"}</div>
-                <div class="valSmall">{data?.testsStarted.subText ?? "-"}</div>
+    <Page id="about">
+      <div class="content-grid grid gap-8">
+        <section class="text-center text-sub">
+          Created with love by Miodec.
+          <br />
+          <a href="#supporters_title">Supported</a> and{" "}
+          <a href="#contributors_title">expanded</a> by many awesome people.
+          <br />
+          Launched on 15th of May, 2020.
+        </section>
+        <section>
+          <AsyncContent
+            alwaysShowContent
+            queries={{ typingStats }}
+            errorMessage="Failed to get global typing stats"
+          >
+            {({ typingStatsData }) => (
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <For
+                  each={
+                    [
+                      [
+                        "total tests started",
+                        () => typingStatsData()?.testsStarted,
+                      ],
+                      [
+                        "total typing time",
+                        () => typingStatsData()?.timeTyping,
+                      ],
+                      [
+                        "total tests completed",
+                        () => typingStatsData()?.testsCompleted,
+                      ],
+                    ] as const
+                  }
+                >
+                  {([title, stat]) => (
+                    <div class="text-center">
+                      <div class="text-sub">{title}</div>
+                      <div class="text-5xl">{stat()?.text ?? "-"}</div>
+                      <div class="text-xl">{stat()?.subText ?? "-"}</div>
+                    </div>
+                  )}
+                </For>
               </div>
-              <div
-                class="group"
-                aria-label={data?.timeTyping.label}
-                data-balloon-pos="up"
-              >
-                <div class="label">total typing time</div>
-                <div class="val">{data?.timeTyping.text ?? "-"}</div>
-                <div class="valSmall">{data?.timeTyping.subText ?? "-"}</div>
-              </div>
-              <div
-                class="group"
-                aria-label={data?.testsCompleted.label}
-                data-balloon-pos="up"
-              >
-                <div class="label">total tests completed</div>
-                <div class="val">{data?.testsCompleted.text ?? "-"}</div>
-                <div class="valSmall">
-                  {data?.testsCompleted.subText ?? "-"}
-                </div>
-              </div>
-            </div>
-          )}
-        </AsyncContent>
-        <div>
-          <div class="chart" style={{ height: "200px" }}>
-            <AsyncContent
-              alwaysShowContent
-              resource={speedHistogram}
-              errorMessage="Failed to get global speed stats for histogram"
-            >
-              {(data) => (
+            )}
+          </AsyncContent>
+        </section>
+        <section class="h-48 w-full">
+          <AsyncContent
+            alwaysShowContent
+            queries={{ speedHistogram }}
+            errorMessage="Failed to get global speed stats for histogram"
+          >
+            {({ speedHistogramData }) => (
+              <>
                 <ChartJs
+                  name="SpeedHistogram"
                   type="bar"
                   data={{
-                    labels: data?.labels ?? [],
+                    labels: speedHistogramData()?.labels ?? [],
                     datasets: [
                       {
                         yAxisID: "count",
                         label: "Users",
-                        data: data?.data ?? [],
+                        data: speedHistogramData()?.data ?? [],
+                        minBarLength: 2,
+                        backgroundColor: getTheme().main,
+                        borderColor: getTheme().main,
                       },
                     ],
                   }}
@@ -145,371 +166,261 @@ export function AboutPage(): JSXElement {
                         animation: { duration: 250 },
                         intersect: false,
                         mode: "index",
+                        callbacks: {
+                          afterLabel: (context) => {
+                            return (
+                              (context.raw as { topPercentage?: string })
+                                .topPercentage ?? ""
+                            );
+                          },
+                        },
                       },
                     },
                   }}
                 />
-              )}
-            </AsyncContent>
-          </div>
-          <p class="small">distribution of time 60 leaderboard results (wpm)</p>
-        </div>
-      </div>
-      <div class="section">
-        <div class="bigtitle">
-          <i class="fas fa-info-circle"></i>
-          about
-        </div>
-        <h2>
-          Monkeytype is a minimalistic and customizable typing test. It features
-          many test modes, an account system to save your typing speed history,
-          and user-configurable features such as themes, sounds, a smooth caret,
-          and more. Monkeytype attempts to emulate the experience of natural
-          keyboard typing during a typing test, by unobtrusively presenting the
-          text prompts and displaying typed characters in-place, providing
-          straightforward, real-time feedback on typos, speed, and accuracy.
-          <br />
-          <br />
-          Test yourself in various modes, track your progress and improve your
-          speed.
-        </h2>
-      </div>
-      <div class="section">
-        <div class="title">
-          <i class="fas fa-align-left"></i>
-          word set
-        </div>
-        <p>
-          By default, this website uses the most common 200 words in the English
-          language to generate its tests. You can change to an expanded set
-          (1000 most common words) in the options, or change the language
-          entirely.
-        </p>
-      </div>
-      <div class="section">
-        <div class="title">
-          <i class="fas fa-keyboard"></i>
-          keybinds
-        </div>
-        <p>
-          You can use <kbd>tab</kbd> and <kbd>enter</kbd> (or just{" "}
-          <kbd>tab</kbd> if you have quick tab mode enabled) to restart the
-          typing test. Open the command line by pressing <kbd>ctrl/cmd</kbd> +{" "}
-          <kbd>shift</kbd> + <kbd>p</kbd> or <kbd>esc</kbd> - there you can
-          access all the functionality you need without touching your mouse.
-        </p>
-      </div>
-      <div class="section">
-        <div class="title">
-          <i class="fas fa-list-ol"></i>
-          stats
-        </div>
+                <div class="text-right text-xs text-sub">
+                  distribution of time 60 leaderboard results (wpm) <br />
+                  {numberOfHistogramRecords(speedHistogramData()?.data)} total
+                  results
+                </div>
+              </>
+            )}
+          </AsyncContent>
+        </section>
+        <section>
+          <H2 fa={{ icon: "fa-info-circle" }} text="about" />
+          <p>
+            Monkeytype is a minimalistic and customizable typing test. It
+            features many test modes, an account system to save your typing
+            speed history, and user-configurable features such as themes,
+            sounds, a smooth caret, and more. Monkeytype attempts to emulate the
+            experience of natural keyboard typing during a typing test, by
+            unobtrusively presenting the text prompts and displaying typed
+            characters in-place, providing straightforward, real-time feedback
+            on typos, speed, and accuracy.
+            <br />
+            <br />
+            Test yourself in various modes, track your progress and improve your
+            speed.
+          </p>
+        </section>
+        <section>
+          <H3 fa={{ icon: "fa-align-left" }} text="word set" />
+          <p>
+            By default, this website uses the most common 200 words in the
+            English language to generate its tests. You can change to an
+            expanded set (1000 most common words) in the options, or change the
+            language entirely.
+          </p>
+        </section>
+        <section>
+          <H3 fa={{ icon: "fa-keyboard" }} text="keybinds" />
+          <p>
+            You can use <QuickRestartHotkey /> to restart the typing test. Open
+            the command line by pressing <CommandlineHotkey /> - there you can
+            access all the functionality you need without touching your mouse.
+          </p>
+        </section>
+        <section>
+          <H3 fa={{ icon: "fa-list-ol" }} text="stats" />
+          <dl class="grid">
+            <dt class="col-1 mr-4">wpm</dt>
+            <dd class="col-2">
+              - total number of characters in the correctly typed words
+              (including spaces), divided by 5 and normalised to 60 seconds.
+            </dd>
 
-        <dl>
-          <dt>wpm</dt>
-          <dd>
-            - total number of characters in the correctly typed words (including
-            spaces), divided by 5 and normalised to 60 seconds.
-          </dd>
+            <dt class="col-1 mr-4">raw wpm</dt>
+            <dd class="col-2">
+              {" "}
+              - calculated just like wpm, but also includes incorrect words.
+            </dd>
 
-          <dt>raw wpm</dt>
-          <dd>
-            {" "}
-            - calculated just like wpm, but also includes incorrect words.
-          </dd>
+            <dt class="col-1 mr-4">acc</dt>
+            <dd class="col-2"> - percentage of correctly pressed keys.</dd>
 
-          <dt>acc</dt>
-          <dd> - percentage of correctly pressed keys.</dd>
+            <dt class="col-1 mr-4">char</dt>
+            <dd class="col-2">
+              - correct characters / incorrect characters. Calculated after the
+              test has ended.
+            </dd>
 
-          <dt>char</dt>
-          <dd>
-            - correct characters / incorrect characters. Calculated after the
-            test has ended.
-          </dd>
-
-          <dt>consistency</dt>
-          <dd>
-            - based on the variance of your raw wpm. Closer to 100% is better.
-            Calculated using the coefficient of variation of raw wpm and mapped
-            onto a scale from 0 to 100.
-          </dd>
-        </dl>
-      </div>
-      <Show when={getAds() === "sellout"}>
-        <div id="ad-about-1-wrapper" class="ad full-width advertisement ad-h">
-          <div class="icon">
-            <i class="fas fa-ad"></i>
+            <dt class="col-1 mr-4">consistency</dt>
+            <dd class="col-2">
+              - based on the variance of your raw wpm. Closer to 100% is better.
+              Calculated using the coefficient of variation of raw wpm and
+              mapped onto a scale from 0 to 100.
+            </dd>
+          </dl>
+        </section>
+        <Advertisement id="ad-about-1" visible="sellout" />
+        <section>
+          <H3 fa={{ icon: "fa-chart-area" }} text="results screen" />
+          <p>
+            After completing a test you will be able to see your wpm, raw wpm,
+            accuracy, character stats, test length, leaderboards info and test
+            info (you can hover over some values to get floating point numbers).
+            You can also see a graph of your wpm and raw over the duration of
+            the test. Remember that the wpm line is a global average, while the
+            raw wpm line is a local, momentary value (meaning if you stop, the
+            value is 0).
+          </p>
+        </section>
+        <section>
+          <H3 fa={{ icon: "fa-bug" }} text="bug report or feature request" />
+          <p>
+            If you encounter a bug, or have a feature request - join the Discord
+            server, send me an email, a direct message on Twitter or create an
+            issue on GitHub.
+          </p>
+        </section>
+        <div></div>
+        <section>
+          <H2 fa={{ icon: "fa-life-ring" }} text="support" />
+          <p>
+            Thanks to everyone who has supported this project. It would not be
+            possible without you and your continued support.
+          </p>
+          <div class="mt-4 text-xl">
+            <Button
+              fa={{
+                icon: "fa-donate",
+              }}
+              onClick={() => showModal("Support")}
+              text="support"
+              class="w-full p-8"
+            />
           </div>
-          <div id="ad-about-1"></div>
-        </div>
-        <div id="ad-about-1-small-wrapper" class="ad advertisement ad-h-s">
-          <div class="icon small">
-            <i class="fas fa-ad"></i>
+        </section>
+        <div></div>
+        <section>
+          <H2 fa={{ icon: "fa-envelope" }} text="contact" />
+          <p>
+            If you encounter a bug, have a feature request or just want to say
+            hi - here are the different ways you can contact me directly.
+          </p>
+          <div class="mt-4 grid w-full grid-cols-1 gap-4 text-xl sm:grid-cols-2 lg:grid-cols-4">
+            <Button
+              text="mail"
+              fa={{ icon: "fa-envelope" }}
+              onClick={() => showModal("Contact")}
+              class="w-full p-8"
+            />
+            <Button
+              text="twitter"
+              fa={{ icon: "fa-twitter", variant: "brand" }}
+              href="https://x.com/monkeytype"
+              class="w-full p-8"
+            />
+            <Button
+              text="discord"
+              fa={{ icon: "fa-discord", variant: "brand" }}
+              href="https://discord.gg/monkeytype"
+              class="w-full p-8"
+            />
+            <Button
+              text="github"
+              fa={{ icon: "fa-github", variant: "brand" }}
+              href="https://github.com/monkeytypegame/monkeytype"
+              class="w-full p-8"
+            />
           </div>
-          <div id="ad-about-1-small"></div>
-        </div>
-      </Show>
-      <div class="section">
-        <div class="title">
-          <i class="fas fa-chart-area"></i>
-          results screen
-        </div>
-        <p>
-          After completing a test you will be able to see your wpm, raw wpm,
-          accuracy, character stats, test length, leaderboards info and test
-          info (you can hover over some values to get floating point numbers).
-          You can also see a graph of your wpm and raw over the duration of the
-          test. Remember that the wpm line is a global average, while the raw
-          wpm line is a local, momentary value (meaning if you stop, the value
-          is 0).
-        </p>
+        </section>
+        <div></div>
+        <section>
+          <H2 fa={{ icon: "fa-users" }} text="credits" />
+          <p>
+            <Button
+              variant="text"
+              text="Montydrei"
+              href="https://www.reddit.com/user/montydrei"
+              class="p-0 pt-2 pr-2 pb-2"
+            />
+            for the name suggestion
+          </p>
+          <p>
+            <Button
+              variant="text"
+              text="Everyone"
+              href="https://www.reddit.com/r/MechanicalKeyboards/comments/gc6wx3/experimenting_with_a_completely_new_type_of/"
+              class="p-0 pt-2 pr-2 pb-2"
+            />
+            who provided valuable feedback on the original reddit post for the
+            prototype of this website
+          </p>
+          <p>
+            <Button
+              variant="text"
+              text="Supporters"
+              href="#supporters_title"
+              class="p-0 pt-2 pr-2 pb-2"
+            />
+            who helped financially by donating, enabling optional ads or buying
+            merch
+          </p>
+          <p>
+            <Button
+              variant="text"
+              text="Contributors"
+              href="https://github.com/monkeytypegame/monkeytype/graphs/contributors"
+              class="p-0 pt-2 pr-2 pb-2"
+            />
+            on GitHub that have helped with implementing various features,
+            adding themes and more
+          </p>
+        </section>
+        <Advertisement id="ad-about-2" visible="sellout" />
+        <div></div>
+        <section>
+          <H2
+            id="supporters_title"
+            fa={{ icon: "fa-hand-holding-usd" }}
+            text="top supporters"
+          />
+          <AsyncContent
+            queries={{ supporters }}
+            errorMessage="Failed to get supporters"
+          >
+            {({ supportersData }) => (
+              <div
+                class="grid"
+                style={{
+                  "grid-template-columns":
+                    "repeat(auto-fill, minmax(13em, 1fr))",
+                }}
+              >
+                <For each={supportersData()}>{(name) => <div>{name}</div>}</For>
+              </div>
+            )}
+          </AsyncContent>
+        </section>
+        <div></div>
+        <section>
+          <H2
+            id="contributors_title"
+            fa={{ icon: "fa-code-branch" }}
+            text="contributors"
+          />
+          <AsyncContent
+            queries={{ contributors }}
+            errorMessage="Failed to get contributors"
+          >
+            {({ contributorsData }) => (
+              <div
+                class="grid"
+                style={{
+                  "grid-template-columns":
+                    "repeat(auto-fill, minmax(13em, 1fr))",
+                }}
+              >
+                <For each={contributorsData()}>
+                  {(name) => <div>{name}</div>}
+                </For>
+              </div>
+            )}
+          </AsyncContent>
+        </section>
       </div>
-      <div class="section">
-        <div class="title">
-          <i class="fas fa-bug"></i>
-          bug report or feature request
-        </div>
-        <p>
-          If you encounter a bug, or have a feature request - join the Discord
-          server, send me an email, a direct message on Twitter or create an
-          issue on GitHub.
-        </p>
-      </div>
-      <div></div>
-      <div class="section">
-        <div class="bigtitle">
-          <i class="fas fa-life-ring"></i>
-          support
-        </div>
-        <p>
-          Thanks to everyone who has supported this project. It would not be
-          possible without you and your continued support.
-        </p>
-        <div class="supportButtons">
-          <Button
-            icon="fas fa-donate"
-            onClick={() => showModal("Support")}
-            text="support"
-          />
-        </div>
-      </div>
-      <div></div>
-      <div class="section">
-        <div class="bigtitle">
-          <i class="fas fa-envelope"></i>
-          contact
-        </div>
-        <p>
-          If you encounter a bug, have a feature request or just want to say hi
-          - here are the different ways you can contact me directly.
-        </p>
-        <div class="contactButtons">
-          <Button
-            text="mail"
-            icon="fas fa-envelope"
-            onClick={() => showModal("Contact")}
-          />
-          <Button
-            text="twitter"
-            icon="fab fa-twitter"
-            href="https://x.com/monkeytype"
-          />
-          <Button
-            text="discord"
-            icon="fab fa-discord"
-            href="https://discord.gg/monkeytype"
-          />
-          <Button
-            text="github"
-            icon="fab fa-github"
-            href="https://github.com/monkeytypegame/monkeytype"
-          />
-        </div>
-      </div>
-      <div></div>
-      <div class="section" data-section="credits">
-        <div class="bigtitle">
-          <i class="fas fa-users"></i>
-          credits
-        </div>
-        <p>
-          <Button
-            type="text"
-            text="Montydrei"
-            href="https://www.reddit.com/user/montydrei"
-          />
-          for the name suggestion
-        </p>
-        <p>
-          <Button
-            type="text"
-            text="Everyone"
-            href="https://www.reddit.com/r/MechanicalKeyboards/comments/gc6wx3/experimenting_with_a_completely_new_type_of/"
-          />
-          who provided valuable feedback on the original reddit post for the
-          prototype of this website
-        </p>
-        <p>
-          <Button type="text" text="Supporters" href="#supporters_title" />
-          who helped financially by donating, enabling optional ads or buying
-          merch
-        </p>
-        <p>
-          <Button
-            type="text"
-            text="Contributors"
-            href="https://github.com/monkeytypegame/monkeytype/graphs/contributors"
-          />
-          on GitHub that have helped with implementing various features, adding
-          themes and more
-        </p>
-      </div>
-      <Show when={getAds() === "sellout"}>
-        <div id="ad-about-2-wrapper" class="ad full-width advertisement ad-h">
-          <div class="icon">
-            <i class="fas fa-ad"></i>
-          </div>
-          <div id="ad-about-2"></div>
-        </div>
-        <div id="ad-about-2-small-wrapper" class="ad advertisement ad-h-s">
-          <div class="icon small">
-            <i class="fas fa-ad"></i>
-          </div>
-          <div id="ad-about-2-small"></div>
-        </div>
-      </Show>
-      <div></div>
-      <div class="section" data-section="supporters">
-        <div id="supporters_title" class="bigtitle">
-          <i class="fas fa-hand-holding-usd"></i>
-          top supporters
-        </div>
-        <AsyncContent
-          resource={supporters}
-          errorMessage="Failed to get supporters"
-        >
-          {(data) => (
-            <div class="supporters">
-              <For each={data}>{(name) => <div>{name}</div>}</For>
-            </div>
-          )}
-        </AsyncContent>
-      </div>
-      <div></div>
-      <div class="section" data-section="contributors">
-        <div id="contributors_title" class="bigtitle">
-          <i class="fas fa-code-branch"></i>
-          contributors
-        </div>
-        <AsyncContent
-          resource={contributors}
-          errorMessage="Failed to get contributors"
-        >
-          {(data) => (
-            <div class="contributors">
-              <For each={data}>{(name) => <div>{name}</div>}</For>
-            </div>
-          )}
-        </AsyncContent>
-      </div>
-    </Show>
+    </Page>
   );
-}
-
-type GroupDisplay = {
-  label: string;
-  text: string;
-  subText: string;
-};
-
-async function fetchTypingStats(): Promise<{
-  timeTyping: GroupDisplay;
-  testsStarted: GroupDisplay;
-  testsCompleted: GroupDisplay;
-}> {
-  const response = await Ape.public.getTypingStats();
-
-  if (response.status !== 200) {
-    throw new Error(response.body.message);
-  }
-  const data = response.body.data;
-
-  const typingSecondsRounded = Math.round(data.timeTyping);
-  const typingDuration = intervalToDuration({
-    start: 0,
-    end: typingSecondsRounded * 1000,
-  });
-  const startedWithMagnitude = getNumberWithMagnitude(data.testsStarted);
-  const completedWithMagnitude = getNumberWithMagnitude(data.testsCompleted);
-
-  const result = {
-    timeTyping: {
-      label:
-        numberWithSpaces(Math.round(typingSecondsRounded / 3600)) + " hours",
-      text: typingDuration.years?.toString() ?? "",
-      subText: "years",
-    },
-    testsStarted: {
-      label: numberWithSpaces(data.testsStarted) + " tests",
-      text:
-        startedWithMagnitude.rounded < 10
-          ? startedWithMagnitude.roundedTo2.toString()
-          : startedWithMagnitude.rounded.toString(),
-      subText: startedWithMagnitude.orderOfMagnitude,
-    },
-    testsCompleted: {
-      label: numberWithSpaces(data.testsCompleted) + " tests",
-      text:
-        completedWithMagnitude.rounded < 10
-          ? completedWithMagnitude.roundedTo2.toString()
-          : completedWithMagnitude.rounded.toString(),
-      subText: completedWithMagnitude.orderOfMagnitude,
-    },
-  };
-  return result;
-}
-
-async function fetchSpeedHistogram(): Promise<
-  | {
-      labels: string[];
-      data: { x: number; y: number }[];
-    }
-  | undefined
-> {
-  const response = await Ape.public.getSpeedHistogram({
-    query: {
-      language: "english",
-      mode: "time",
-      mode2: "60",
-    },
-  });
-
-  if (response.status !== 200) {
-    throw new Error(response.body.message);
-  }
-
-  const data = response.body.data;
-
-  const histogramChartDataBucketed: { x: number; y: number }[] = [];
-  const labels: string[] = [];
-
-  const keys = Object.keys(data).sort(
-    (a, b) => parseInt(a, 10) - parseInt(b, 10),
-  );
-  for (const [i, key] of keys.entries()) {
-    const nextKey = keys[i + 1];
-    const bucket = parseInt(key, 10);
-    histogramChartDataBucketed.push({
-      x: bucket,
-      y: data[bucket] as number,
-    });
-    labels.push(`${bucket} - ${bucket + 9}`);
-    if (nextKey !== undefined && bucket + 10 !== parseInt(nextKey, 10)) {
-      for (let j = bucket + 10; j < parseInt(nextKey, 10); j += 10) {
-        histogramChartDataBucketed.push({ x: j, y: 0 });
-        labels.push(`${j} - ${j + 9}`);
-      }
-    }
-  }
-  return { data: histogramChartDataBucketed, labels };
 }

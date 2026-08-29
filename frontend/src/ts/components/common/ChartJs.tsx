@@ -1,19 +1,26 @@
-import { onMount, onCleanup, createEffect, JSXElement } from "solid-js";
 import {
+  CartesianScaleOptions,
   Chart,
-  ChartType,
   ChartData,
   ChartOptions,
+  ChartType,
   DefaultDataPoint,
+  ScaleChartOptions,
 } from "chart.js";
-import { useRefWithUtils } from "../../hooks/useRefWithUtils";
-import { ChartWithUpdateColors } from "../../controllers/chart-controller";
-import { getThemeColors } from "../../signals/theme";
+import chartTrendline from "chartjs-plugin-trendline";
+import { createDeferred, JSXElement, onCleanup, onMount } from "solid-js";
 
+import { Theme } from "../../constants/themes";
+import { createEffectOn } from "../../hooks/effects";
+import { useRefWithUtils } from "../../hooks/useRefWithUtils";
+import { getTheme } from "../../states/theme";
+
+Chart.register(chartTrendline);
 type ChartJSProps<
   T extends ChartType = ChartType,
   TData = DefaultDataPoint<T>,
 > = {
+  name: string;
   type: T;
   data: ChartData<T, TData>;
   options?: ChartOptions<T>;
@@ -26,42 +33,67 @@ export function ChartJs<T extends ChartType, TData = DefaultDataPoint<T>>(
   // Refs are assigned by SolidJS via the ref attribute
   const [canvasRef, canvasEl] = useRefWithUtils<HTMLCanvasElement>();
 
-  let chart: ChartWithUpdateColors<T, TData> | undefined;
+  let chart: Chart<T, TData> | undefined;
 
   onMount(() => {
-    //oxlint-disable-next-line no-non-null-assertion
-    chart = new ChartWithUpdateColors(canvasEl()!.native, {
+    const canvas = canvasEl();
+    if (canvas === undefined) return;
+    if (chart !== undefined) return;
+
+    chart = new Chart(canvas.native, {
       type: props.type,
       data: props.data,
-      options: props.options,
+      options: addColorsToOptions(props.options as ChartOptions<T>, getTheme),
     });
-
     props.onChartInit?.(chart);
   });
 
-  createEffect(() => {
+  const updateChart = (data: ChartData<T, TData>): void => {
     if (!chart) return;
 
-    chart.config.type = props.type;
-    chart.data = props.data;
+    chart.data = data;
+
     if (props.options) {
-      chart.options = props.options;
+      chart.options = addColorsToOptions(props.options, getTheme);
     }
-    chart.update();
-    void chart.updateColors();
-  });
 
-  createEffect(() => {
-    //react on theme changes
-    const colors = getThemeColors();
-    if (!chart) return;
+    chart.update("none");
+  };
 
-    void chart.updateColors(colors);
-  });
+  const deferredData = createDeferred(() => props.data, { timeoutMs: 500 });
+
+  createEffectOn(deferredData, (data) => updateChart(data), { defer: true });
 
   onCleanup(() => {
     chart?.destroy();
   });
 
-  return <canvas ref={canvasRef}></canvas>;
+  return <canvas class="chartCanvas" ref={canvasRef}></canvas>;
+}
+
+function addColorsToOptions<TType extends ChartType = ChartType>(
+  options: ChartOptions<TType>,
+  theme: () => Theme,
+): ChartOptions<TType> {
+  //axis colors
+  const chartScaleOptions = options as ScaleChartOptions<TType>;
+  Object.keys(chartScaleOptions.scales).forEach((scaleID) => {
+    const axis = chartScaleOptions.scales[scaleID] as CartesianScaleOptions;
+    axis.ticks = {
+      ...axis.ticks,
+      color: theme().sub,
+    };
+    axis.title = {
+      ...axis.title,
+      color: theme().sub,
+    };
+    axis.grid = {
+      ...axis.grid,
+      color: theme().subAlt,
+      tickColor: theme().subAlt,
+      borderColor: theme().subAlt,
+    };
+  });
+
+  return options;
 }

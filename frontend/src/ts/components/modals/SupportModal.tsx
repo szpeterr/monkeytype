@@ -1,50 +1,75 @@
 import { JSXElement } from "solid-js";
+
+import { setCommandlineSubgroup } from "../../states/core";
+import { showModal } from "../../states/modals";
 import { AnimatedModal } from "../common/AnimatedModal";
-import "./SupportModal.scss";
-import { showModal } from "../../stores/modals";
-import { setCommandlineSubgroup } from "../../signals/core";
 import { Button } from "../common/Button";
+import { Fa } from "../common/Fa";
 
 export function SupportModal(): JSXElement {
+  const buttonClass =
+    "p-4 flex flex-col text-md h-full justify-center items-center";
+  const iconScale = 2;
+
   return (
-    <AnimatedModal id="Support">
-      <div class="title">Support Monkeytype</div>
-      <div class="text">
+    <AnimatedModal
+      id="Support"
+      title="Support Monkeytype"
+      modalClass="max-w-4xl"
+    >
+      <div>
         Thank you so much for thinking about supporting this project. It would
-        not be possible without you and your continued support.
-        <i class="fas fa-heart"></i>
+        not be possible without you and your continued support.{" "}
+        <Fa icon="fa-heart" />
       </div>
-      <div class="buttons">
+      <div class="grid grid-cols-1 gap-4 xs:grid-cols-2 md:grid-cols-4">
         <Button
-          type="button"
+          variant="button"
           onClick={() => {
             setCommandlineSubgroup("ads");
             showModal("Commandline");
           }}
-          icon="fas fa-ad"
+          fa={{
+            icon: "fa-ad",
+            fixedWidth: true,
+            size: iconScale,
+          }}
           text="Enable Ads"
-          fixedWidthIcon
+          class={buttonClass}
         />
         <Button
-          type="button"
+          variant="button"
           href="https://ko-fi.com/monkeytype"
-          icon="fas fa-donate"
+          fa={{
+            icon: "fa-donate",
+            fixedWidth: true,
+            size: iconScale,
+          }}
           text="Donate"
-          fixedWidthIcon
+          class={buttonClass}
         />
         <Button
-          type="button"
+          variant="button"
           href="https://www.patreon.com/monkeytype"
-          icon="fab fa-patreon"
+          fa={{
+            variant: "brand",
+            icon: "fa-patreon",
+            fixedWidth: true,
+            size: iconScale,
+          }}
           text="Join Patreon"
-          fixedWidthIcon
+          class={buttonClass}
         />
         <Button
-          type="button"
+          variant="button"
           href="https://monkeytype.store"
-          icon="fas fa-tshirt"
+          fa={{
+            icon: "fa-tshirt",
+            fixedWidth: true,
+            size: iconScale,
+          }}
           text="Buy Merch"
-          fixedWidthIcon
+          class={buttonClass}
         />
       </div>
     </AnimatedModal>

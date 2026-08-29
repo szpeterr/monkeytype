@@ -1,52 +1,82 @@
 import Ape from "../ape";
 import * as TestUI from "./test-ui";
-import * as ManualRestart from "./manual-restart-tracker";
-import Config, { setConfig, setQuoteLengthAll, toggleFunbox } from "../config";
 import * as Strings from "../utils/strings";
 import * as Misc from "../utils/misc";
-import * as Arrays from "../utils/arrays";
 import * as JSONData from "../utils/json-data";
 import * as Numbers from "@monkeytype/util/numbers";
-import * as Notifications from "../elements/notifications";
+import {
+  showNoticeNotification,
+  showErrorNotification,
+  showSuccessNotification,
+} from "../states/notifications";
 import * as CustomText from "./custom-text";
-import * as CustomTextState from "../states/custom-text-name";
-import * as TestStats from "./test-stats";
 import * as PractiseWords from "./practise-words";
-import * as ShiftTracker from "./shift-tracker";
-import * as AltTracker from "./alt-tracker";
 import * as Funbox from "./funbox/funbox";
 import * as PaceCaret from "./pace-caret";
-import * as Caret from "./caret";
 import * as TestTimer from "./test-timer";
-import * as AccountButton from "../elements/account-button";
 import * as DB from "../db";
-import * as Replay from "./replay";
+import * as Replay from "./replay-ui";
+import { __nonReactive } from "../collections/tags";
 import * as TodayTracker from "./today-tracker";
 import * as ChallengeContoller from "../controllers/challenge-controller";
-import * as QuoteRateModal from "../modals/quote-rate";
+import { clearQuoteStats } from "../states/quote-rate";
 import * as Result from "./result";
-import { getActivePage } from "../signals/core";
-import * as TestInput from "./test-input";
+import {
+  getActivePage,
+  getCustomTextIndicator,
+  isAuthenticated,
+} from "../states/core";
+import {
+  setIsDirectionReversed,
+  setIsLanguageRightToLeft,
+  setKoreanStatus,
+  setLastEventLog,
+  setIsTestRestarting,
+  isTestRestarting,
+  getCurrentQuote,
+  getIncompleteSeconds,
+  getIncompleteTests,
+  getRestartCount,
+  isPaceRepeat,
+  isRepeated,
+  isTestActive,
+  pushIncompleteTest,
+  resetIncompleteTests,
+  setIsPaceRepeat,
+  setIsRepeated,
+  setIsTestInvalid,
+  setLastResult,
+  getActiveWordIndex,
+  resetActiveWordIndex,
+  getBailedOut,
+  isResultCalculating,
+  setBailedOut,
+  setLastSignedOutResult,
+  setResultCalculating,
+  setResultVisible,
+  setTestActive,
+  setWordsHaveNewline,
+  setWordsHaveNumbers,
+  setWordsHaveTab,
+  getResultVisible,
+} from "../states/test";
+import { restartTestEvent } from "../events/test";
 import * as TestWords from "./test-words";
 import * as WordsGenerator from "./words-generator";
-import * as TestState from "./test-state";
-import * as PageTransition from "../states/page-transition";
-import * as ConfigEvent from "../observables/config-event";
-import * as TimerEvent from "../observables/timer-event";
+import * as PageTransition from "../legacy-states/page-transition";
+import { configEvent } from "../events/config";
+import { timerEvent } from "../events/timer";
 import objectHash from "object-hash";
 import * as AnalyticsController from "../controllers/analytics-controller";
-import { getAuthenticatedUser, isAuthenticated } from "../firebase";
-import * as ConnectionState from "../states/connection";
-import * as KeymapEvent from "../observables/keymap-event";
-import * as LazyModeState from "../states/remember-lazy-mode";
-import Format from "../utils/format";
-import { QuoteLength, QuoteLengthConfig } from "@monkeytype/schemas/configs";
+import { getAuthenticatedUser } from "../firebase";
+import { highlight } from "../events/keymap";
+import * as LazyModeState from "../legacy-states/remember-lazy-mode";
+import Format from "../singletons/format";
 import { Mode } from "@monkeytype/schemas/shared";
 import {
   CompletedEvent,
   CompletedEventCustomText,
 } from "@monkeytype/schemas/results";
-import * as XPBar from "../elements/xp-bar";
 import {
   findSingleActiveFunboxWithFunction,
   getActiveFunboxes,
@@ -56,34 +86,54 @@ import {
   isFunboxActiveWithProperty,
 } from "./funbox/list";
 import { getFunbox } from "@monkeytype/funbox";
-import * as CompositionState from "../states/composition";
+import * as CompositionState from "../legacy-states/composition";
 import { SnapshotResult } from "../constants/default-snapshot";
 import { WordGenError } from "../utils/word-gen-error";
 import { tryCatch } from "@monkeytype/util/trycatch";
 import * as Sentry from "../sentry";
-import * as Loader from "../elements/loader";
+import { showLoaderBar, hideLoaderBar } from "../states/loader-bar";
 import * as TestInitFailed from "../elements/test-init-failed";
 import { canQuickRestart } from "../utils/quick-restart";
 import { animate } from "animejs";
 import { setInputElementValue } from "../input/input-element";
 import { debounce } from "throttle-debounce";
-import * as Time from "../states/time";
+import { qs } from "../utils/dom";
+import { setAccountButtonSpinner } from "../states/header";
+import { Config } from "../config/store";
+import { setQuoteLengthAll, toggleFunbox, setConfig } from "../config/setters";
+import {
+  resetTestEvents,
+  cleanupData,
+  logEventsDataToTheConsoleTable,
+  forceReleaseAllKeys,
+  buildEventLog,
+} from "./events/data";
+import {
+  getKeypressDurations,
+  getChars,
+  getBurstHistory,
+  getLastKeypressToEndMs,
+  getStartToFirstKeypressMs,
+  getTestDurationMs,
+  getAccuracy,
+  getKeypressOverlap,
+  getErrorCountHistory,
+  getWpmHistory,
+  getAfkDuration,
+  getIncompleteTestSeconds,
+  getDateBasedTestDurationMs,
+  getInputHistory,
+  getKeypressesPerSecond,
+  getKeypressSpacing,
+} from "./events/stats";
+import { getLiveCachedAccuracy } from "./events/live-cache";
+import { calculateWpm } from "../utils/numbers";
+import { isDevEnvironment } from "../utils/env";
+import { EventLog } from "./events/types";
+import { resetModifierState } from "../states/modifiers";
+import { nthElementFromArray } from "../utils/arrays";
 
 let failReason = "";
-
-export let notSignedInLastResult: CompletedEvent | null = null;
-
-export function clearNotSignedInResult(): void {
-  notSignedInLastResult = null;
-}
-
-export function setNotSignedInUidAndHash(uid: string): void {
-  if (notSignedInLastResult === null) return;
-  notSignedInLastResult.uid = uid;
-  //@ts-expect-error really need to delete this
-  delete notSignedInLastResult.hash;
-  notSignedInLastResult.hash = objectHash(notSignedInLastResult);
-}
 
 export function startTest(now: number): boolean {
   if (PageTransition.get()) {
@@ -96,11 +146,7 @@ export function startTest(now: number): boolean {
     void AnalyticsController.log("testStartedNoLogin");
   }
 
-  TestState.setActive(true);
-  Replay.startReplayRecording();
-  Replay.replayGetWordsList(TestWords.words.list);
-  TestInput.resetKeypressTimings();
-  Time.set(0);
+  setTestActive(true);
   TestTimer.clear();
 
   for (const fb of getActiveFunboxesWithFunction("start")) {
@@ -108,16 +154,12 @@ export function startTest(now: number): boolean {
   }
 
   try {
-    if (
-      Config.paceCaret !== "off" ||
-      (Config.repeatedPace && TestState.isPaceRepeat)
-    ) {
+    if (Config.paceCaret !== "off" || (Config.repeatedPace && isPaceRepeat())) {
       PaceCaret.start();
     }
   } catch (e) {}
   //use a recursive self-adjusting timer to avoid time drift
-  TestStats.setStart(now);
-  void TestTimer.start();
+  void TestTimer.start(now);
   TestUI.onTestStart();
   return true;
 }
@@ -125,45 +167,43 @@ export function startTest(now: number): boolean {
 type RestartOptions = {
   withSameWordset?: boolean;
   nosave?: boolean;
-  event?: JQuery.KeyDownEvent;
+  event?: KeyboardEvent;
   practiseMissed?: boolean;
   noAnim?: boolean;
+  isQuickRestart?: boolean;
 };
 
-// withSameWordset = false,
-// _?: boolean, // this is nosave and should be renamed to nosave when needed
-// event?: JQuery.KeyDownEvent,
-// practiseMissed = false,
-// noAnim = false
-
-export function restart(options = {} as RestartOptions): void {
+export async function restart(options = {} as RestartOptions): Promise<void> {
   const defaultOptions = {
     withSameWordset: false,
     practiseMissed: false,
     noAnim: false,
     nosave: false,
+    isQuickRestart: false,
   };
 
   options = { ...defaultOptions, ...options };
-  Strings.clearWordDirectionCache();
 
-  const animationTime = options.noAnim ? 0 : Misc.applyReducedMotion(125);
+  // guards
 
   const noQuit = isFunboxActive("no_quit");
-  if (TestState.isActive && noQuit) {
-    Notifications.add("No quit funbox is active. Please finish the test.", 0, {
-      important: true,
-    });
+  if (isTestActive() && noQuit) {
+    showNoticeNotification(
+      "No quit funbox is active. Please finish the test.",
+      {
+        important: true,
+      },
+    );
     options.event?.preventDefault();
     return;
   }
 
-  if (TestState.testRestarting || TestUI.resultCalculating) {
+  if (isTestRestarting() || isResultCalculating()) {
     options.event?.preventDefault();
     return;
   }
-  if (getActivePage() === "test") {
-    if (!ManualRestart.get()) {
+  if (isTestActive()) {
+    if (options.isQuickRestart) {
       if (Config.mode !== "zen") options.event?.preventDefault();
       if (
         !canQuickRestart(
@@ -171,7 +211,7 @@ export function restart(options = {} as RestartOptions): void {
           Config.words,
           Config.time,
           CustomText.getData(),
-          CustomTextState.isCustomTextLong() ?? false,
+          getCustomTextIndicator()?.isLong ?? false,
         )
       ) {
         let message = "Use your mouse to confirm.";
@@ -182,45 +222,43 @@ export function restart(options = {} as RestartOptions): void {
         } else if (Config.quickRestart === "enter") {
           message = "Press shift + enter or use your mouse to confirm.";
         }
-        Notifications.add(
+        showNoticeNotification(
           `Quick restart disabled in long tests. ${message}`,
-          0,
           {
-            duration: 4,
+            durationMs: 4000,
             important: true,
           },
         );
         return;
       }
     }
-  }
 
-  if (TestState.isActive) {
-    if (TestState.isRepeated) {
+    // close out the abandoned test
+
+    if (isRepeated()) {
       options.withSameWordset = true;
     }
 
-    if (TestState.savingEnabled) {
-      TestInput.pushKeypressesToHistory();
-      TestInput.pushErrorToHistory();
-      TestInput.pushAfkToHistory();
-      const testSeconds = TestStats.calculateTestSeconds(performance.now());
-      const afkseconds = TestStats.calculateAfkSeconds(testSeconds);
-      let tt = Numbers.roundTo2(testSeconds - afkseconds);
-      if (tt < 0) tt = 0;
-      TestStats.incrementIncompleteSeconds(tt);
-      TestStats.incrementRestartCount();
-      const acc = Numbers.roundTo2(TestStats.calculateAccuracy());
-      TestStats.pushIncompleteTest(acc, tt);
+    if (Config.resultSaving) {
+      // Finalize the abandoned test before measuring it: logging the timer
+      // "end" event gives getAfkDuration its interval boundaries, so idle time
+      // is actually subtracted. Without it AFK is always 0 and the full
+      // wall-clock lifetime (incl. unbounded idle) leaks into the result.
+      TestTimer.clear(true);
+      const liveEventLog = buildEventLog();
+      const tt = getIncompleteTestSeconds(liveEventLog);
+      const acc = Numbers.roundTo2(getLiveCachedAccuracy());
+      pushIncompleteTest({ acc, seconds: tt });
     }
   }
 
+  const currentQuote = getCurrentQuote();
   if (
     Config.mode === "quote" &&
-    TestWords.currentQuote !== null &&
-    Config.language.startsWith(TestWords.currentQuote.language) &&
+    currentQuote !== null &&
+    Config.language.startsWith(currentQuote.language) &&
     Config.repeatQuotes === "typing" &&
-    (TestState.isActive || failReason !== "")
+    (isTestActive() || failReason !== "")
   ) {
     options.withSameWordset = true;
   }
@@ -230,7 +268,7 @@ export function restart(options = {} as RestartOptions): void {
     !options.withSameWordset &&
     !options.practiseMissed
   ) {
-    Notifications.add("Reverting to previous settings.", 0);
+    showNoticeNotification("Reverting to previous settings.");
     if (PractiseWords.before.punctuation !== null) {
       setConfig("punctuation", PractiseWords.before.punctuation);
     }
@@ -251,95 +289,62 @@ export function restart(options = {} as RestartOptions): void {
     PractiseWords.resetBefore();
   }
 
-  ManualRestart.reset();
+  // reset state
+
+  resetTestEvents();
   TestTimer.clear();
-  TestStats.restart();
-  TestInput.restart();
-  TestInput.corrected.reset();
-  ShiftTracker.reset();
-  AltTracker.reset();
-  Caret.hide();
-  TestState.setActive(false);
-  Replay.stopReplayRecording();
+  setIsTestInvalid(false);
+  resetModifierState();
+  setTestActive(false);
   Replay.pauseReplay();
-  TestState.setBailedOut(false);
-  Caret.resetPosition();
+  setBailedOut(false);
   PaceCaret.reset();
-  TestInput.input.setKoreanStatus(false);
-  QuoteRateModal.clearQuoteStats();
+  setKoreanStatus(false);
+  clearQuoteStats();
   CompositionState.setComposing(false);
   CompositionState.setData("");
+  Strings.clearWordDirectionCache();
+  testReinitCount = 0;
+  failReason = "";
 
-  if (!ConnectionState.get()) {
-    ConnectionState.showOfflineBanner();
+  const repeatWithPace =
+    (Config.repeatedPace && options.withSameWordset) ?? false;
+  setIsRepeated(options.withSameWordset ?? false);
+  setIsPaceRepeat(repeatWithPace);
+
+  // restart
+
+  const source: "testPage" | "resultPage" = getResultVisible()
+    ? "resultPage"
+    : "testPage";
+  const noAnim = options.noAnim ?? false;
+
+  setIsTestRestarting(true);
+
+  await TestUI.fadeOutForRestart(source, noAnim);
+
+  setResultVisible(false);
+  setInputElementValue("");
+
+  await Funbox.rememberSettings();
+
+  const initResult = await init();
+
+  if (!initResult) {
+    setIsTestRestarting(false);
+    return;
   }
 
-  // TestUI.beforeTestRestart();
+  await PaceCaret.init();
 
-  let source: "testPage" | "resultPage";
-  let el: HTMLElement;
-  if (TestState.resultVisible) {
-    //results are being displayed
-    el = document.querySelector("#result") as HTMLElement;
-    source = "resultPage";
-  } else {
-    //words are being displayed
-    el = document.querySelector("#typingTest") as HTMLElement;
-    source = "testPage";
+  for (const fb of getActiveFunboxesWithFunction("restart")) {
+    fb.functions.restart();
   }
 
-  TestState.setResultVisible(false);
-  TestState.setTestRestarting(true);
+  TestUI.onTestRestart(source);
 
-  animate(el, {
-    opacity: 0,
-    duration: animationTime,
-    onComplete: async () => {
-      setInputElementValue("");
-
-      await Funbox.rememberSettings();
-
-      testReinitCount = 0;
-      failReason = "";
-
-      let repeatWithPace = false;
-      if (Config.repeatedPace && options.withSameWordset) {
-        repeatWithPace = true;
-      }
-
-      TestState.setRepeated(options.withSameWordset ?? false);
-      TestState.setPaceRepeat(repeatWithPace);
-      TestInitFailed.hide();
-      TestState.setTestInitSuccess(true);
-      const initResult = await init();
-
-      if (!initResult) {
-        TestState.setTestRestarting(false);
-        return;
-      }
-
-      await PaceCaret.init();
-
-      for (const fb of getActiveFunboxesWithFunction("restart")) {
-        fb.functions.restart();
-      }
-
-      TestUI.onTestRestart(source);
-
-      const typingTestEl = document.querySelector("#typingTest") as HTMLElement;
-      animate(typingTestEl, {
-        opacity: [0, 1],
-        onBegin: () => {
-          typingTestEl.classList.remove("hidden");
-        },
-        duration: animationTime,
-        onComplete: () => {
-          ManualRestart.reset();
-          TestState.setTestRestarting(false);
-        },
-      });
-    },
-  });
+  await TestUI.fadeInAfterRestart(noAnim);
+  setIsTestRestarting(false);
 }
 
 let lastInitError: Error | null = null;
@@ -357,28 +362,21 @@ async function init(): Promise<boolean> {
       );
     }
     TestInitFailed.show();
-    TestState.setTestRestarting(false);
-    TestState.setTestInitSuccess(false);
+    setIsTestRestarting(false);
     return false;
   }
 
-  Replay.stopReplayRecording();
   TestWords.words.reset();
-  TestState.setActiveWordIndex(0);
-  TestInput.input.resetHistory();
-  TestInput.input.current = "";
+  resetActiveWordIndex();
 
-  Loader.show();
+  showLoaderBar();
   const { data: language, error } = await tryCatch(
     JSONData.getLanguage(Config.language),
   );
-  Loader.hide();
+  hideLoaderBar();
 
   if (error) {
-    Notifications.add(
-      Misc.createErrorMessage(error, "Failed to load language"),
-      -1,
-    );
+    showErrorNotification("Failed to load language", { error });
   }
 
   if (!language || language.name !== Config.language) {
@@ -405,13 +403,9 @@ async function init(): Promise<boolean> {
         JSONData.getLanguage(langName),
       );
       if (error) {
-        Notifications.add(
-          Misc.createErrorMessage(
-            error,
-            `Failed to load language: ${langName}`,
-          ),
-          -1,
-        );
+        showErrorNotification(`Failed to load language: ${langName}`, {
+          error,
+        });
       }
       return lang;
     });
@@ -423,9 +417,8 @@ async function init(): Promise<boolean> {
     if (Config.lazyMode && !anySupportsLazyMode) {
       LazyModeState.setRemember(true);
       if (!showedLazyModeNotification) {
-        Notifications.add(
+        showNoticeNotification(
           "None of the selected polyglot languages support lazy mode.",
-          0,
           {
             important: true,
           },
@@ -443,7 +436,7 @@ async function init(): Promise<boolean> {
     if (Config.lazyMode && !allowLazyMode) {
       LazyModeState.setRemember(true);
       if (!showedLazyModeNotification) {
-        Notifications.add("This language does not support lazy mode.", 0, {
+        showNoticeNotification("This language does not support lazy mode.", {
           important: true,
         });
         showedLazyModeNotification = true;
@@ -476,13 +469,13 @@ async function init(): Promise<boolean> {
     mode: Config.mode,
     mode2: Misc.getMode2(Config, null),
     funbox: Config.funbox,
-    currentQuote: TestWords.currentQuote,
+    currentQuote: getCurrentQuote(),
   });
 
   let wordsHaveTab = false;
   let wordsHaveNewline = false;
   let allRightToLeft: boolean | undefined = undefined;
-  let allLigatures: boolean | undefined = undefined;
+  let allJoiningScript: boolean | undefined = undefined;
   let generatedWords: string[] = [];
   let generatedSectionIndexes: number[] = [];
   try {
@@ -491,27 +484,24 @@ async function init(): Promise<boolean> {
     generatedSectionIndexes = gen.sectionIndexes;
     wordsHaveTab = gen.hasTab;
     wordsHaveNewline = gen.hasNewline;
-    ({ allRightToLeft, allLigatures } = gen);
+    ({ allRightToLeft, allJoiningScript } = gen);
   } catch (e) {
-    Loader.hide();
+    hideLoaderBar();
     if (e instanceof WordGenError || e instanceof Error) {
       lastInitError = e;
     }
     console.error(e);
     if (e instanceof WordGenError) {
       if (e.message.length > 0) {
-        Notifications.add(e.message, 0, {
+        showNoticeNotification(e.message, {
           important: true,
         });
       }
     } else {
-      Notifications.add(
-        Misc.createErrorMessage(e, "Failed to generate words"),
-        -1,
-        {
-          important: true,
-        },
-      );
+      showErrorNotification("Failed to generate words", {
+        error: e,
+        important: true,
+      });
     }
 
     return await init();
@@ -525,9 +515,9 @@ async function init(): Promise<boolean> {
     }
   }
 
-  TestWords.setHasNumbers(hasNumbers);
-  TestWords.setHasTab(wordsHaveTab);
-  TestWords.setHasNewline(wordsHaveNewline);
+  setWordsHaveNumbers(hasNumbers);
+  setWordsHaveTab(wordsHaveTab);
+  setWordsHaveNewline(wordsHaveNewline);
 
   if (
     generatedWords
@@ -537,7 +527,7 @@ async function init(): Promise<boolean> {
         /[\uac00-\ud7af]|[\u1100-\u11ff]|[\u3130-\u318f]|[\ua960-\ua97f]|[\ud7b0-\ud7ff]/g,
       )
   ) {
-    TestInput.input.setKoreanStatus(true);
+    setKoreanStatus(true);
   }
 
   for (let i = 0; i < generatedWords.length; i++) {
@@ -547,26 +537,29 @@ async function init(): Promise<boolean> {
     );
   }
 
+  if (WordsGenerator.areAllWordsGenerated()) {
+    TestWords.words.removeCommitCharacterFromLastWord();
+  }
+
   if (Config.keymapMode === "next" && Config.mode !== "zen") {
-    void KeymapEvent.highlight(
-      Arrays.nthElementFromArray(
+    highlight(
+      nthElementFromArray(
         // ignoring for now but this might need a different approach
         // oxlint-disable-next-line no-misused-spread
-        [...TestWords.words.getCurrent()],
+        [...(TestWords.words.getCurrent()?.text ?? "")],
         0,
       ) as string,
     );
   }
-  Funbox.toggleScript(TestWords.words.getCurrent());
-  TestUI.setLigatures(allLigatures ?? language.ligatures ?? false);
+
+  Funbox.toggleScript(TestWords.words.getCurrent()?.text ?? "");
+  TestUI.setJoiningClass(allJoiningScript ?? language.joiningScript ?? false);
 
   const isLanguageRTL = allRightToLeft ?? language.rightToLeft ?? false;
-  TestState.setIsLanguageRightToLeft(isLanguageRTL);
-  TestState.setIsDirectionReversed(
-    isFunboxActiveWithProperty("reverseDirection"),
-  );
+  setIsLanguageRightToLeft(isLanguageRTL);
+  setIsDirectionReversed(isFunboxActiveWithProperty("reverseDirection"));
 
-  console.debug("Test initialized with words", generatedWords);
+  console.debug("Test initialized with words", TestWords.words.get());
   console.debug(
     "Test initialized with section indexes",
     generatedSectionIndexes,
@@ -574,30 +567,10 @@ async function init(): Promise<boolean> {
   return true;
 }
 
-export function areAllTestWordsGenerated(): boolean {
-  return (
-    (Config.mode === "words" &&
-      TestWords.words.length >= Config.words &&
-      Config.words > 0) ||
-    (Config.mode === "custom" &&
-      CustomText.getLimitMode() === "word" &&
-      TestWords.words.length >= CustomText.getLimitValue() &&
-      CustomText.getLimitValue() !== 0) ||
-    (Config.mode === "quote" &&
-      TestWords.words.length >=
-        (TestWords.currentQuote?.textSplit?.length ?? 0)) ||
-    (Config.mode === "custom" &&
-      CustomText.getLimitMode() === "section" &&
-      WordsGenerator.sectionIndex >= CustomText.getLimitValue() &&
-      WordsGenerator.currentSection.length === 0 &&
-      CustomText.getLimitValue() !== 0)
-  );
-}
-
 //add word during the test
 export async function addWord(): Promise<void> {
   if (Config.mode === "zen") {
-    TestUI.appendEmptyWordElement();
+    TestUI.appendEmptyWordElement(getActiveWordIndex() + 1);
     return;
   }
 
@@ -611,28 +584,27 @@ export async function addWord(): Promise<void> {
   const toPushCount = funboxToPush?.split(":")[1];
   if (toPushCount !== undefined) bound = +toPushCount - 1;
 
-  if (TestWords.words.length - TestInput.input.getHistory().length > bound) {
+  if (TestWords.words.length - (getActiveWordIndex() + 1) > bound) {
     console.debug("Not adding word, enough words already");
     return;
   }
-  if (areAllTestWordsGenerated()) {
+  if (WordsGenerator.areAllWordsGenerated()) {
     console.debug("Not adding word, all words generated");
     return;
   }
   const sectionFunbox = findSingleActiveFunboxWithFunction("pullSection");
   if (sectionFunbox) {
-    if (TestWords.words.length - TestState.activeWordIndex < 20) {
+    if (TestWords.words.length - getActiveWordIndex() < 20) {
       const section = await sectionFunbox.functions.pullSection(
         Config.language,
       );
 
       if (section === false) {
-        Notifications.add(
+        showErrorNotification(
           "Error while getting section. Please try again later",
-          -1,
         );
         toggleFunbox(sectionFunbox.name);
-        restart();
+        void restart();
         return;
       }
 
@@ -645,8 +617,11 @@ export async function addWord(): Promise<void> {
           break;
         }
         wordCount++;
-        TestWords.words.push(word, i);
-        TestUI.addWord(word);
+        const newWord = TestWords.words.push(
+          WordsGenerator.appendCommitCharacter(word),
+          i,
+        );
+        TestUI.addWord(newWord.display);
       }
     }
   }
@@ -655,24 +630,30 @@ export async function addWord(): Promise<void> {
     const randomWord = await WordsGenerator.getNextWord(
       TestWords.words.length,
       bound,
-      TestWords.words.get(TestWords.words.length - 1),
-      TestWords.words.get(TestWords.words.length - 2),
+      TestWords.words.get(TestWords.words.length - 1)?.text ?? "",
+      TestWords.words.get(TestWords.words.length - 2)?.text,
     );
 
-    TestWords.words.push(randomWord.word, randomWord.sectionIndex);
-    TestUI.addWord(randomWord.word);
+    const newWord = TestWords.words.push(
+      randomWord.word,
+      randomWord.sectionIndex,
+    );
+    TestUI.addWord(newWord.display);
   } catch (e) {
-    TimerEvent.dispatch("fail", "word generation error");
-    Notifications.add(
-      Misc.createErrorMessage(
-        e,
-        "Error while getting next word. Please try again later",
-      ),
-      -1,
+    timerEvent.dispatch({ key: "fail", value: "word generation error" });
+    showErrorNotification(
+      "Error while getting next word. Please try again later",
       {
+        error: e,
         important: true,
       },
     );
+  }
+
+  // strip the trailing commit separator once the final word has been generated
+  // (covers the section and lazy paths)
+  if (WordsGenerator.areAllWordsGenerated()) {
+    TestWords.words.removeCommitCharacterFromLastWord();
   }
 }
 
@@ -690,11 +671,10 @@ export async function retrySavingResult(): Promise<void> {
   const { completedEvent } = retrySaving;
 
   if (completedEvent === null) {
-    Notifications.add(
+    showNoticeNotification(
       "Could not retry saving the result as the result no longer exists.",
-      0,
       {
-        duration: 5,
+        durationMs: 5000,
         important: true,
       },
     );
@@ -707,71 +687,27 @@ export async function retrySavingResult(): Promise<void> {
   }
 
   retrySaving.canRetry = false;
-  $("#retrySavingResultButton").addClass("hidden");
+  qs("#retrySavingResultButton")?.hide();
 
-  Notifications.add("Retrying to save...");
+  showNoticeNotification("Retrying to save...");
 
   await saveResult(completedEvent, true);
 }
 
 function buildCompletedEvent(
-  stats: TestStats.Stats,
-  rawPerSecond: number[],
+  eventLog: EventLog,
 ): Omit<CompletedEvent, "hash" | "uid"> {
-  //build completed event object
-  let stfk = Numbers.roundTo2(
-    TestInput.keypressTimings.spacing.first - TestStats.start,
-  );
-  if (stfk < 0 || Config.mode === "zen") {
-    stfk = 0;
-  }
+  const chars = getChars(eventLog);
 
-  let lkte = Numbers.roundTo2(
-    TestStats.end - TestInput.keypressTimings.spacing.last,
-  );
-  if (lkte < 0 || Config.mode === "zen") {
-    lkte = 0;
-  }
+  //tags
+  const activeTagsIds: string[] = __nonReactive
+    .getActiveTags()
+    .map((tag) => tag._id);
 
-  //consistency
-  const stddev = Numbers.stdDev(rawPerSecond);
-  const avg = Numbers.mean(rawPerSecond);
-  let consistency = Numbers.roundTo2(Numbers.kogasa(stddev / avg));
-  let keyConsistencyArray = TestInput.keypressTimings.spacing.array.slice();
-  if (keyConsistencyArray.length > 0) {
-    keyConsistencyArray = keyConsistencyArray.slice(
-      0,
-      keyConsistencyArray.length - 1,
-    );
+  let language = Config.language;
+  if (Config.mode === "quote") {
+    language = Strings.removeLanguageSize(Config.language);
   }
-  let keyConsistency = Numbers.roundTo2(
-    Numbers.kogasa(
-      Numbers.stdDev(keyConsistencyArray) / Numbers.mean(keyConsistencyArray),
-    ),
-  );
-  if (!consistency || isNaN(consistency)) {
-    consistency = 0;
-  }
-  if (!keyConsistency || isNaN(keyConsistency)) {
-    keyConsistency = 0;
-  }
-
-  const chartErr = [];
-  for (const error of TestInput.errorHistory) {
-    chartErr.push(error.count ?? 0);
-  }
-
-  const chartData = {
-    wpm: TestInput.wpmHistory,
-    burst: rawPerSecond,
-    err: chartErr,
-  };
-
-  //wpm consistency
-  const stddev3 = Numbers.stdDev(chartData.wpm ?? []);
-  const avg3 = Numbers.mean(chartData.wpm ?? []);
-  const wpmCons = Numbers.roundTo2(Numbers.kogasa(stddev3 / avg3));
-  const wpmConsistency = isNaN(wpmCons) ? 0 : wpmCons;
 
   let customText: CompletedEventCustomText | undefined = undefined;
   if (Config.mode === "custom") {
@@ -784,66 +720,86 @@ function buildCompletedEvent(
     };
   }
 
-  //tags
-  const activeTagsIds: string[] = [];
-  for (const tag of DB.getSnapshot()?.tags ?? []) {
-    if (tag.active === true) {
-      activeTagsIds.push(tag._id);
-    }
+  let duration = getTestDurationMs(eventLog) / 1000;
+
+  const rawPerSecond = getBurstHistory(eventLog);
+  const afkDuration = getAfkDuration(eventLog);
+  const stddev = Numbers.stdDev(rawPerSecond);
+  const avg = Numbers.mean(rawPerSecond);
+  let consistency = Numbers.roundTo2(Numbers.kogasa(stddev / avg));
+  if (!consistency || isNaN(consistency)) {
+    consistency = 0;
   }
 
-  const duration = parseFloat(stats.time.toString());
-  const afkDuration = TestStats.calculateAfkSeconds(duration);
-  let language = Config.language;
-  if (Config.mode === "quote") {
-    language = Strings.removeLanguageSize(Config.language);
+  const keypressSpacing = getKeypressSpacing(eventLog);
+
+  let keyConsistencyArray = [...keypressSpacing];
+  if (keypressSpacing.length > 0) {
+    keyConsistencyArray = keyConsistencyArray.slice(
+      0,
+      keyConsistencyArray.length - 1,
+    );
+  }
+  const keyStddev = Numbers.stdDev(keyConsistencyArray);
+  const keyAvg = Numbers.mean(keyConsistencyArray);
+  let keyConsistency = Numbers.roundTo2(Numbers.kogasa(keyStddev / keyAvg));
+  if (!keyConsistency || isNaN(keyConsistency)) {
+    keyConsistency = 0;
   }
 
-  const quoteLength = TestWords.currentQuote?.group ?? -1;
+  const wpmHistory = getWpmHistory(eventLog);
+  const wpmCons = Numbers.roundTo2(
+    Numbers.kogasa(Numbers.stdDev(wpmHistory) / Numbers.mean(wpmHistory)),
+  );
+  const wpmConsistency = isNaN(wpmCons) ? 0 : wpmCons;
 
+  const chartData = {
+    wpm: wpmHistory,
+    burst: rawPerSecond,
+    err: getErrorCountHistory(eventLog),
+  };
+
+  const currentQuote = getCurrentQuote();
   const completedEvent: Omit<CompletedEvent, "hash" | "uid"> = {
-    wpm: stats.wpm,
-    rawWpm: stats.wpmRaw,
-    charStats: [
-      stats.correctChars + stats.correctSpaces,
-      stats.incorrectChars,
-      stats.extraChars,
-      stats.missedChars,
-    ],
-    charTotal: stats.allChars,
-    acc: stats.acc,
-    mode: Config.mode,
-    mode2: Misc.getMode2(Config, TestWords.currentQuote),
-    quoteLength: quoteLength,
+    wpm: Numbers.roundTo2(calculateWpm(chars.correctWord, duration)),
+    rawWpm: Numbers.roundTo2(
+      calculateWpm(chars.allCorrect + chars.incorrect + chars.extra, duration),
+    ),
+    charStats: [chars.correctWord, chars.incorrect, chars.extra, chars.missed],
+    charTotal: chars.allCorrect + chars.incorrect + chars.extra,
+    acc: Numbers.roundTo2(getAccuracy(eventLog).percentage),
+    language: language,
+    testDuration: duration,
+    lastKeyToEnd: getLastKeypressToEndMs(eventLog),
+    startToFirstKey: getStartToFirstKeypressMs(eventLog),
+    afkDuration: afkDuration,
+    quoteLength: currentQuote?.group ?? -1,
+    customText: customText,
+    tags: activeTagsIds,
     punctuation: Config.punctuation,
     numbers: Config.numbers,
     lazyMode: Config.lazyMode,
     timestamp: Date.now(),
-    language: language,
-    restartCount: TestStats.restartCount,
-    incompleteTests: TestStats.incompleteTests,
-    incompleteTestSeconds:
-      TestStats.incompleteSeconds < 0
-        ? 0
-        : Numbers.roundTo2(TestStats.incompleteSeconds),
+    mode: Config.mode,
+    mode2: Misc.getMode2(Config, currentQuote),
+    bailedOut: getBailedOut(),
+    funbox: Config.funbox,
     difficulty: Config.difficulty,
     blindMode: Config.blindMode,
-    tags: activeTagsIds,
-    keySpacing: TestInput.keypressTimings.spacing.array,
-    keyDuration: TestInput.keypressTimings.duration.array,
-    keyOverlap: Numbers.roundTo2(TestInput.keyOverlap.total),
-    lastKeyToEnd: lkte,
-    startToFirstKey: stfk,
+    stopOnLetter: Config.stopOnError === "letter",
+    restartCount: getRestartCount(),
+    incompleteTests: getIncompleteTests(),
+    incompleteTestSeconds:
+      getIncompleteSeconds() < 0 ? 0 : Numbers.roundTo2(getIncompleteSeconds()),
+
     consistency: consistency,
     wpmConsistency: wpmConsistency,
     keyConsistency: keyConsistency,
-    funbox: Config.funbox,
-    bailedOut: TestState.bailedOut,
     chartData: chartData,
-    customText: customText,
-    testDuration: duration,
-    afkDuration: afkDuration,
-    stopOnLetter: Config.stopOnError === "letter",
+
+    keySpacing: keypressSpacing,
+    keyDuration: getKeypressDurations(eventLog),
+    keyOverlap: getKeypressOverlap(eventLog),
   };
 
   if (completedEvent.mode !== "custom") delete completedEvent.customText;
@@ -853,11 +809,10 @@ function buildCompletedEvent(
 }
 
 export async function finish(difficultyFailed = false): Promise<void> {
-  if (!TestState.isActive) return;
-  TestUI.setResultCalculating(true);
+  if (!isTestActive()) return;
+  setResultCalculating(true);
   const now = performance.now();
-  TestTimer.clear();
-  TestStats.setEnd(now);
+  TestTimer.clear(true, now);
 
   // fade out the test and show loading
   // because the css animation has a delay,
@@ -866,96 +821,30 @@ export async function finish(difficultyFailed = false): Promise<void> {
     opacity: 0,
     duration: Misc.applyReducedMotion(125),
   });
-  $(".pageTest #typingTest").addClass("hidden");
-  $(".pageTest .loading").removeClass("hidden");
+  qs(".pageTest #typingTest")?.hide();
+  qs(".pageTest .loading")?.show();
   await Misc.sleep(0); //allow ui update
 
   TestUI.onTestFinish();
 
-  if (TestState.isRepeated && Config.mode === "quote") {
-    TestState.setRepeated(false);
+  if (isRepeated() && Config.mode === "quote") {
+    setIsRepeated(false);
   }
 
-  // in case the tests ends with a keypress (not a word submission)
-  // we need to push the current input to history
-  if (TestInput.input.current.length !== 0) {
-    TestInput.input.pushHistory();
-    TestInput.corrected.pushHistory();
-    Replay.replayGetWordsList(TestInput.input.getHistory());
+  forceReleaseAllKeys();
+
+  setResultVisible(true);
+  setTestActive(false);
+
+  cleanupData();
+
+  if (isDevEnvironment()) {
+    logEventsDataToTheConsoleTable();
   }
 
-  // in zen mode, ensure the replay words list reflects the typed input history
-  // even if the current input was empty at finish (e.g., after submitting a word).
-  if (Config.mode === "zen") {
-    Replay.replayGetWordsList(TestInput.input.getHistory());
-  }
-
-  TestInput.forceKeyup(now); //this ensures that the last keypress(es) are registered
-
-  const endAfkSeconds = (now - TestInput.keypressTimings.spacing.last) / 1000;
-  if ((Config.mode === "zen" || TestState.bailedOut) && endAfkSeconds < 7) {
-    TestStats.setEnd(TestInput.keypressTimings.spacing.last);
-  }
-
-  TestState.setResultVisible(true);
-  TestState.setActive(false);
-  Replay.stopReplayRecording();
-
-  //need one more calculation for the last word if test auto ended
-  if (TestInput.burstHistory.length !== TestInput.input.getHistory()?.length) {
-    const burst = TestStats.calculateBurst(now);
-    TestInput.pushBurstToHistory(burst);
-  }
-
-  //remove afk from zen
-  if (Config.mode === "zen" || TestState.bailedOut) {
-    TestStats.removeAfkData();
-  }
-
-  // stats
-  const stats = TestStats.calculateFinalStats();
-  if (
-    stats.time % 1 !== 0 &&
-    !(
-      Config.mode === "time" ||
-      (Config.mode === "custom" && CustomText.getLimitMode() === "time")
-    )
-  ) {
-    TestStats.setLastSecondNotRound();
-  }
-
-  PaceCaret.setLastTestWpm(stats.wpm);
-
-  // if the last second was not rounded, add another data point to the history
-  if (TestStats.lastSecondNotRound && !difficultyFailed) {
-    const wpmAndRaw = TestStats.calculateWpmAndRaw();
-    TestInput.pushToWpmHistory(wpmAndRaw.wpm);
-    TestInput.pushToRawHistory(wpmAndRaw.raw);
-    TestInput.pushKeypressesToHistory();
-    TestInput.pushErrorToHistory();
-    TestInput.pushAfkToHistory();
-  }
-
-  const rawPerSecond = TestInput.keypressCountHistory.map((count) =>
-    Math.round((count / 5) * 60),
-  );
-
-  //adjust last second if last second is not round
-  // if (TestStats.lastSecondNotRound && stats.time % 1 >= 0.1) {
-  if (
-    Config.mode !== "time" &&
-    TestStats.lastSecondNotRound &&
-    stats.time % 1 >= 0.5
-  ) {
-    const timescale = 1 / (stats.time % 1);
-
-    //multiply last element of rawBefore by scale, and round it
-    rawPerSecond[rawPerSecond.length - 1] = Math.round(
-      (rawPerSecond[rawPerSecond.length - 1] as number) * timescale,
-    );
-  }
-
-  const ce = buildCompletedEvent(stats, rawPerSecond);
+  const eventLog = buildEventLog();
+  const ce = buildCompletedEvent(eventLog);
+  PaceCaret.setLastTestWpm(ce.wpm);
 
   console.debug("Completed event object", ce);
 
@@ -978,51 +867,44 @@ export async function finish(difficultyFailed = false): Promise<void> {
 
   if (countUndefined(ce) > 0) {
     console.log(ce);
-    Notifications.add(
+    showErrorNotification(
       "Failed to build result object: One of the fields is undefined or NaN",
-      -1,
     );
     dontSave = true;
   }
 
   const completedEvent = structuredClone(ce) as CompletedEvent;
 
-  TestStats.setLastResult(structuredClone(completedEvent));
+  setLastEventLog(eventLog);
+  setLastResult(structuredClone(completedEvent));
 
   ///////// completed event ready
 
   //afk check
-  const kps = TestInput.afkHistory.slice(-5);
-  let afkDetected = kps.every((afk) => afk);
-  if (TestState.bailedOut) afkDetected = false;
+  let afkDetected = getKeypressesPerSecond(eventLog)
+    .slice(-5)
+    .every((kps) => kps === 0);
+  if (getBailedOut()) afkDetected = false;
 
   const mode2Number = parseInt(completedEvent.mode2);
 
   let tooShort = false;
   //fail checks
-  const dateDur = (TestStats.end3 - TestStats.start3) / 1000;
+  const dateDur = getDateBasedTestDurationMs(eventLog) / 1000;
   if (
     Config.mode === "time" &&
-    !TestState.bailedOut &&
+    !getBailedOut() &&
     (ce.testDuration < dateDur - 0.1 || ce.testDuration > dateDur + 0.1) &&
     ce.testDuration <= 120
   ) {
-    Notifications.add("Test invalid - inconsistent test duration", 0);
+    showNoticeNotification("Test invalid - inconsistent test duration");
     console.error("Test duration inconsistent", ce.testDuration, dateDur);
-    TestStats.setInvalid();
+    setIsTestInvalid(true);
     dontSave = true;
   } else if (difficultyFailed) {
-    Notifications.add(`Test failed - ${failReason}`, 0, {
-      duration: 1,
+    showNoticeNotification(`Test failed - ${failReason}`, {
+      durationMs: 1000,
     });
-    dontSave = true;
-  } else if (afkDetected) {
-    Notifications.add("Test invalid - AFK detected", 0);
-    TestStats.setInvalid();
-    dontSave = true;
-  } else if (TestState.isRepeated) {
-    Notifications.add("Test invalid - repeated", 0);
-    TestStats.setInvalid();
     dontSave = true;
   } else if (
     completedEvent.testDuration < 1 ||
@@ -1043,9 +925,17 @@ export async function finish(difficultyFailed = false): Promise<void> {
       CustomText.getLimitValue() < 15) ||
     (Config.mode === "zen" && completedEvent.testDuration < 15)
   ) {
-    Notifications.add("Test invalid - too short", 0);
-    TestStats.setInvalid();
+    showNoticeNotification("Test invalid - too short");
+    setIsTestInvalid(true);
     tooShort = true;
+    dontSave = true;
+  } else if (afkDetected) {
+    showNoticeNotification("Test invalid - AFK detected");
+    setIsTestInvalid(true);
+    dontSave = true;
+  } else if (isRepeated()) {
+    showNoticeNotification("Test invalid - repeated");
+    setIsTestInvalid(true);
     dontSave = true;
   } else if (
     completedEvent.wpm < 0 ||
@@ -1056,8 +946,8 @@ export async function finish(difficultyFailed = false): Promise<void> {
       completedEvent.mode === "words" &&
       completedEvent.mode2 === "10")
   ) {
-    Notifications.add("Test invalid - wpm", 0);
-    TestStats.setInvalid();
+    showNoticeNotification("Test invalid - wpm");
+    setIsTestInvalid(true);
     dontSave = true;
   } else if (
     completedEvent.rawWpm < 0 ||
@@ -1068,8 +958,8 @@ export async function finish(difficultyFailed = false): Promise<void> {
       completedEvent.mode === "words" &&
       completedEvent.mode2 === "10")
   ) {
-    Notifications.add("Test invalid - raw", 0);
-    TestStats.setInvalid();
+    showNoticeNotification("Test invalid - raw");
+    setIsTestInvalid(true);
     dontSave = true;
   } else if (
     (!DB.getSnapshot()?.lbOptOut &&
@@ -1077,49 +967,54 @@ export async function finish(difficultyFailed = false): Promise<void> {
     (DB.getSnapshot()?.lbOptOut === true &&
       (completedEvent.acc < 50 || completedEvent.acc > 100))
   ) {
-    Notifications.add("Test invalid - accuracy", 0);
-    TestStats.setInvalid();
+    showNoticeNotification("Test invalid - accuracy");
+    setIsTestInvalid(true);
     dontSave = true;
   }
 
   // test is valid
 
-  if (TestState.isRepeated) {
-    const testSeconds = completedEvent.testDuration;
-    const afkseconds = completedEvent.afkDuration;
-    let tt = Numbers.roundTo2(testSeconds - afkseconds);
-    if (tt < 0) tt = 0;
-    const acc = completedEvent.acc;
-    TestStats.incrementIncompleteSeconds(tt);
-    TestStats.incrementRestartCount();
-    TestStats.pushIncompleteTest(acc, tt);
+  if (isRepeated() || difficultyFailed) {
+    if (Config.resultSaving) {
+      pushIncompleteTest({
+        acc: completedEvent.acc,
+        seconds: getIncompleteTestSeconds(eventLog),
+      });
+    }
   }
 
-  const customTextName = CustomTextState.getCustomTextName();
-  const isLong = CustomTextState.isCustomTextLong();
+  const customTextName = getCustomTextIndicator()?.name ?? "";
+  const isLong = getCustomTextIndicator()?.isLong === true;
   if (Config.mode === "custom" && customTextName !== "" && isLong) {
     // Let's update the custom text progress
     if (
-      TestState.bailedOut ||
-      TestInput.input.getHistory().length < TestWords.words.length
+      getBailedOut() ||
+      getInputHistory(eventLog).length < TestWords.words.length
     ) {
       // They bailed out
 
-      const history = TestInput.input.getHistory();
+      const history = getInputHistory(eventLog);
       let historyLength = history?.length;
       const wordIndex = historyLength - 1;
 
       const lastWordInputLength = history[wordIndex]?.length ?? 0;
 
-      if (lastWordInputLength < TestWords.words.get(wordIndex).length) {
+      // compare against display.length (not textWithCommit.length): the input
+      // history holds the typed letters, not the committing space separator, so
+      // a space word is "complete" at text.length. display includes a newline
+      // commit, which is a required typed char.
+      if (
+        lastWordInputLength <
+        (TestWords.words.get(wordIndex)?.display.length ?? 0)
+      ) {
         historyLength--;
       }
 
       const newProgress =
         CustomText.getCustomTextLongProgress(customTextName) + historyLength;
       CustomText.setCustomTextLongProgress(customTextName, newProgress);
-      Notifications.add("Long custom text progress saved", 1, {
-        duration: 5,
+      showSuccessNotification("Long custom text progress saved", {
+        durationMs: 5000,
         important: true,
       });
 
@@ -1131,8 +1026,8 @@ export async function finish(difficultyFailed = false): Promise<void> {
       CustomText.setCustomTextLongProgress(customTextName, 0);
       const text = CustomText.getCustomText(customTextName, true);
       CustomText.setText(text);
-      Notifications.add("Long custom text completed", 1, {
-        duration: 5,
+      showSuccessNotification("Long custom text completed", {
+        durationMs: 5000,
         important: true,
       });
     }
@@ -1151,7 +1046,7 @@ export async function finish(difficultyFailed = false): Promise<void> {
     if (dontSave) {
       void AnalyticsController.log("testCompletedInvalid");
     } else {
-      TestStats.resetIncomplete();
+      resetIncompleteTests();
 
       if (!completedEvent.bailedOut) {
         const challenge = ChallengeContoller.verify(completedEvent);
@@ -1162,7 +1057,7 @@ export async function finish(difficultyFailed = false): Promise<void> {
 
       savingResultPromise = saveResult(completedEvent, false);
       void savingResultPromise.then((response) => {
-        if (response && response.status === 200) {
+        if (response?.status === 200) {
           void AnalyticsController.log("testCompleted");
         }
       });
@@ -1172,7 +1067,7 @@ export async function finish(difficultyFailed = false): Promise<void> {
     void AnalyticsController.log("testCompletedNoLogin");
     if (!dontSave) {
       // if its valid save it for later
-      notSignedInLastResult = completedEvent;
+      setLastSignedOutResult(completedEvent);
     }
     dontSave = true;
   }
@@ -1182,9 +1077,9 @@ export async function finish(difficultyFailed = false): Promise<void> {
     difficultyFailed,
     failReason,
     afkDetected,
-    TestState.isRepeated,
+    isRepeated(),
     tooShort,
-    TestWords.currentQuote,
+    getCurrentQuote(),
     dontSave,
   );
 
@@ -1195,30 +1090,12 @@ async function saveResult(
   completedEvent: CompletedEvent,
   isRetrying: boolean,
 ): Promise<null | Awaited<ReturnType<typeof Ape.results.add>>> {
-  AccountButton.loading(true);
-
-  if (!TestState.savingEnabled) {
-    Notifications.add("Result not saved: disabled by user", -1, {
-      duration: 3,
+  if (!Config.resultSaving) {
+    showErrorNotification("Result not saved: disabled by user", {
+      durationMs: 3000,
       customTitle: "Notice",
       important: true,
     });
-    AccountButton.loading(false);
-    return null;
-  }
-
-  if (!ConnectionState.get()) {
-    Notifications.add("Result not saved: offline", -1, {
-      duration: 2,
-      customTitle: "Notice",
-      important: true,
-    });
-    AccountButton.loading(false);
-    retrySaving.canRetry = true;
-    $("#retrySavingResultButton").removeClass("hidden");
-    if (!isRetrying) {
-      retrySaving.completedEvent = completedEvent;
-    }
     return null;
   }
 
@@ -1233,17 +1110,17 @@ async function saveResult(
   delete result.hash;
   result.hash = objectHash(result);
 
-  console.trace();
+  setAccountButtonSpinner(true);
 
   const response = await Ape.results.add({ body: { result } });
 
-  AccountButton.loading(false);
+  setAccountButtonSpinner(false);
 
   if (response.status !== 200) {
     //only allow retry if status is not in this list
     if (![460, 461, 463, 464, 465, 466].includes(response.status)) {
       retrySaving.canRetry = true;
-      $("#retrySavingResultButton").removeClass("hidden");
+      qs("#retrySavingResultButton")?.show();
       if (!isRetrying) {
         retrySaving.completedEvent = result;
       }
@@ -1259,28 +1136,24 @@ async function saveResult(
       response.body.message =
         "Looks like your result data is using an incorrect schema. Please refresh the page to download the new update. If the problem persists, please contact support.";
     }
-    Notifications.add("Failed to save result", -1, { response });
+    showErrorNotification("Failed to save result", { response });
     return response;
   }
 
   const data = response.body.data;
-  $("#result .stats .tags .editTagsButton").attr(
+  qs("#result .stats .tags .editTagsButton")?.setAttribute(
     "data-result-id",
     data.insertedId,
   );
-  $("#result .stats .tags .editTagsButton").removeClass("invisible");
+  qs("#result .stats .tags .editTagsButton")?.removeClass("invisible");
 
   const localDataToSave: DB.SaveLocalResultData = {};
 
   if (data.xp !== undefined) {
-    const snapxp = DB.getSnapshot()?.xp ?? 0;
-
-    void XPBar.update(
-      snapxp,
-      data.xp,
-      TestState.resultVisible ? data.xpBreakdown : undefined,
-    );
     localDataToSave.xp = data.xp;
+    if (getResultVisible()) {
+      localDataToSave.xpBreakdown = data.xpBreakdown;
+    }
   }
 
   if (data.streak !== undefined) {
@@ -1303,7 +1176,7 @@ async function saveResult(
 
   if (data.isPb !== undefined && data.isPb) {
     //new pb
-    const localPb = await DB.getLocalPB(
+    const localPb = DB.getLocalPB(
       result.mode,
       result.mode2,
       result.punctuation,
@@ -1339,14 +1212,14 @@ async function saveResult(
       duration: Misc.applyReducedMotion(250),
     });
 
-    $("#result .stats .dailyLeaderboard .bottom").html(
+    qs("#result .stats .dailyLeaderboard .bottom")?.setHtml(
       Format.rank(data.dailyLeaderboardRank, { fallback: "" }),
     );
   }
 
-  $("#retrySavingResultButton").addClass("hidden");
+  qs("#retrySavingResultButton")?.hide();
   if (isRetrying) {
-    Notifications.add("Result saved", 1, { important: true });
+    showSuccessNotification("Result saved", { important: true });
   }
   DB.saveLocalResult(localDataToSave);
   return response;
@@ -1354,176 +1227,104 @@ async function saveResult(
 
 export function fail(reason: string): void {
   failReason = reason;
-  // input.pushHistory();
-  // corrected.pushHistory();
-  TestInput.pushKeypressesToHistory();
-  TestInput.pushErrorToHistory();
-  TestInput.pushAfkToHistory();
   void finish(true);
-  if (!TestState.savingEnabled) return;
-  const testSeconds = TestStats.calculateTestSeconds(performance.now());
-  const afkseconds = TestStats.calculateAfkSeconds(testSeconds);
-  let tt = Numbers.roundTo2(testSeconds - afkseconds);
-  if (tt < 0) tt = 0;
-  TestStats.incrementIncompleteSeconds(tt);
-  TestStats.incrementRestartCount();
-  const acc = Numbers.roundTo2(TestStats.calculateAccuracy());
-  TestStats.pushIncompleteTest(acc, tt);
 }
 
 const debouncedZipfCheck = debounce(250, async () => {
   const supports = await JSONData.checkIfLanguageSupportsZipf(Config.language);
   if (supports === "no") {
-    Notifications.add(
+    showNoticeNotification(
       `${Strings.capitalizeFirstLetter(
         Strings.getLanguageDisplayString(Config.language),
       )} does not support Zipf funbox, because the list is not ordered by frequency. Please try another word list.`,
-      0,
       {
-        duration: 7,
+        durationMs: 7000,
       },
     );
   }
   if (supports === "unknown") {
-    Notifications.add(
+    showNoticeNotification(
       `${Strings.capitalizeFirstLetter(
         Strings.getLanguageDisplayString(Config.language),
       )} may not support Zipf funbox, because we don't know if it's ordered by frequency or not. If you would like to add this label, please contact us.`,
-      0,
       {
-        duration: 7,
+        durationMs: 7000,
       },
     );
   }
 });
 
-$(".pageTest").on("click", "#testModesNotice .textButton.restart", () => {
-  restart();
+qs(".pageTest")?.onChild("click", "#testInitFailed button.restart", () => {
+  void restart();
 });
 
-$(".pageTest").on("click", "#testInitFailed button.restart", () => {
-  restart();
-});
-
-$(".pageTest").on("click", "#restartTestButton", () => {
-  ManualRestart.set();
-  if (TestUI.resultCalculating) return;
+qs(".pageTest")?.onChild("click", "#restartTestButton", () => {
+  if (isResultCalculating()) return;
   if (
-    TestState.isActive &&
+    isTestActive() &&
     Config.repeatQuotes === "typing" &&
     Config.mode === "quote"
   ) {
-    restart({
+    void restart({
       withSameWordset: true,
     });
   } else {
-    restart();
+    void restart();
   }
 });
 
-$(".pageTest").on("click", "#retrySavingResultButton", retrySavingResult);
+qs(".pageTest")?.onChild(
+  "click",
+  "#retrySavingResultButton",
+  retrySavingResult,
+);
 
-$(".pageTest").on("click", "#nextTestButton", () => {
-  ManualRestart.set();
-  restart();
+qs(".pageTest")?.onChild("click", "#nextTestButton", () => {
+  void restart();
 });
 
-$(".pageTest").on("click", "#restartTestButtonWithSameWordset", () => {
+qs(".pageTest")?.onChild("click", "#restartTestButtonWithSameWordset", () => {
   if (Config.mode === "zen") {
-    Notifications.add("Repeat test disabled in zen mode");
+    showNoticeNotification("Repeat test disabled in zen mode");
     return;
   }
-  ManualRestart.set();
-  restart({
+  void restart({
     withSameWordset: true,
   });
 });
 
-$(".pageTest").on("click", "#testConfig .mode .textButton", (e) => {
-  if (TestState.testRestarting) return;
-  if ($(e.currentTarget).hasClass("active")) return;
-  const mode = ($(e.currentTarget).attr("mode") ?? "time") as Mode;
-  if (mode === undefined) return;
-  if (setConfig("mode", mode)) {
-    ManualRestart.set();
-    restart();
+// little roadblock for basic cheating
+window.addEventListener("focus", () => {
+  if (
+    !isTestActive() &&
+    !getResultVisible() &&
+    (Config.mode === "time" || Config.mode === "words")
+  ) {
+    void restart({
+      noAnim: true,
+    });
   }
 });
 
-$(".pageTest").on("click", "#testConfig .wordCount .textButton", (e) => {
-  if (TestState.testRestarting) return;
-  const wrd = $(e.currentTarget).attr("wordCount") ?? "15";
-  if (wrd !== "custom") {
-    if (setConfig("words", parseInt(wrd))) {
-      ManualRestart.set();
-      restart();
-    }
+// little roadblock for basic cheating
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (
+    !isTestActive() &&
+    !getResultVisible() &&
+    (Config.mode === "time" || Config.mode === "words")
+  ) {
+    void restart({
+      noAnim: true,
+    });
   }
 });
 
-$(".pageTest").on("click", "#testConfig .time .textButton", (e) => {
-  if (TestState.testRestarting) return;
-  const mode = $(e.currentTarget).attr("timeConfig") ?? "10";
-  if (mode !== "custom") {
-    if (setConfig("time", parseInt(mode))) {
-      ManualRestart.set();
-      restart();
-    }
-  }
-});
-
-$(".pageTest").on("click", "#testConfig .quoteLength .textButton", (e) => {
-  if (TestState.testRestarting) return;
-  const lenAttr = $(e.currentTarget).attr("quoteLength");
-  if (lenAttr === "all") {
-    if (setQuoteLengthAll()) {
-      ManualRestart.set();
-      restart();
-    }
-  } else {
-    const len = parseInt(lenAttr ?? "1") as QuoteLength;
-
-    if (len !== -2) {
-      let arr: QuoteLengthConfig = [];
-
-      if (e.shiftKey) {
-        arr = [...Config.quoteLength, len];
-      } else {
-        arr = [len];
-      }
-
-      if (setConfig("quoteLength", arr)) {
-        ManualRestart.set();
-        restart();
-      }
-    }
-  }
-});
-
-$(".pageTest").on("click", "#testConfig .punctuationMode.textButton", () => {
-  if (TestState.testRestarting) return;
-  if (setConfig("punctuation", !Config.punctuation)) {
-    ManualRestart.set();
-    restart();
-  }
-});
-
-$(".pageTest").on("click", "#testConfig .numbersMode.textButton", () => {
-  if (TestState.testRestarting) return;
-  if (setConfig("numbers", !Config.numbers)) {
-    ManualRestart.set();
-    restart();
-  }
-});
-
-$("header").on("click", "nav #startTestButton, #logo", () => {
-  if (getActivePage() === "test") restart();
-  // Result.showConfetti();
-});
+restartTestEvent.subscribe((event) => void restart(event));
 
 // ===============================
 
-ConfigEvent.subscribe(({ key, newValue, nosave }) => {
+configEvent.subscribe(({ key, newValue, nosave }) => {
   if (getActivePage() === "test") {
     if (key === "language") {
       //automatically enable lazy mode for arabic
@@ -1535,20 +1336,20 @@ ConfigEvent.subscribe(({ key, newValue, nosave }) => {
           nosave: true,
         });
       }
-      restart();
+      void restart();
     }
-    if (key === "difficulty" && !nosave) restart();
+    if (key === "difficulty" && !nosave) void restart();
     if (key === "customLayoutfluid" && Config.funbox.includes("layoutfluid")) {
-      restart();
+      void restart();
     }
 
     if (key === "keymapMode" && newValue === "next" && Config.mode !== "zen") {
       setTimeout(() => {
-        void KeymapEvent.highlight(
-          Arrays.nthElementFromArray(
+        highlight(
+          nthElementFromArray(
             // ignoring for now but this might need a different approach
             // oxlint-disable-next-line no-misused-spread
-            [...TestWords.words.getCurrent()],
+            [...(TestWords.words.getCurrent()?.text ?? "")],
             0,
           ) as string,
         );
@@ -1568,7 +1369,7 @@ ConfigEvent.subscribe(({ key, newValue, nosave }) => {
   }
 });
 
-TimerEvent.subscribe((eventKey, eventValue) => {
+timerEvent.subscribe(({ key: eventKey, value: eventValue }) => {
   if (eventKey === "fail" && eventValue !== undefined) fail(eventValue);
   if (eventKey === "finish") void finish();
 });

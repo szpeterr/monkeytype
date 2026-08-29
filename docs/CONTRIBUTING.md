@@ -13,7 +13,7 @@
 
 ## Getting Started
 
-When contributing to Monkeytype, it's good to know our best practices, tips, and tricks. First, Monkeytype is written in ~~JavaScript~~ TypeScript, CSS, and HTML (in order of language usage within the project); thus, we assume you are comfortable with these languages or have basic knowledge of them. Our backend is in NodeJS and we use MongoDB to store our user data. Firebase is used for authentication. Redis is used to store ephemeral data (daily leaderboards, jobs via BullMQ, OAuth state parameters). Furthermore, we use Prettier to format our code.
+When contributing to Monkeytype, it's good to know our best practices, tips, and tricks. First, Monkeytype is written in ~~JavaScript~~ TypeScript, HTML, and CSS (in order of language usage within the project); thus, we assume you are comfortable with these languages or have basic knowledge of them. Our backend is in NodeJS and we use MongoDB to store our user data. Firebase is used for authentication. Redis is used to store ephemeral data (daily leaderboards, jobs via BullMQ, OAuth state parameters). Furthermore, we use Oxc (Oxfmt and Oxlint) to format and lint our code.
 
 ## How to Contribute
 
@@ -81,7 +81,7 @@ If you want to contribute languages but don't know how, check [LANGUAGES.md](/do
 - Verify the `id` property is incremented correctly
 - Please do not add extremely short quotes (less than 60 characters)
 - For quotes not in English, please include translations of quotes in the description of your pull request. This assists in the verification process to ensure the integrity of the quotes.
-- Remember to name your pull request properly. For example, if you are adding new quotes for the language `French`, your pull request should be named `impr(quotes): add French quotes`.
+- Remember to name your pull request properly. For example, if you are adding new quotes for the language `French`, your pull request should be named `impr(quotes): add French quotes (@yourusername)`.
 
 If you want to contribute quotes but don't know how, check [QUOTES.md](/docs/QUOTES.md)
 

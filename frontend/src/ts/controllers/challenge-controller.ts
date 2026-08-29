@@ -1,44 +1,45 @@
-import * as Misc from "../utils/misc";
-import * as JSONData from "../utils/json-data";
-import * as Notifications from "../elements/notifications";
-import * as ManualRestart from "../test/manual-restart-tracker";
+import {
+  showErrorNotification,
+  showNoticeNotification,
+  showSuccessNotification,
+} from "../states/notifications";
 import * as CustomText from "../test/custom-text";
 import * as Funbox from "../test/funbox/funbox";
-import Config, { setConfig } from "../config";
-import * as ConfigEvent from "../observables/config-event";
-import * as TestState from "../test/test-state";
-import * as Loader from "../elements/loader";
-import { CustomTextLimitMode, CustomTextMode } from "@monkeytype/schemas/util";
-import {
-  Config as ConfigType,
-  Difficulty,
-  ThemeName,
-  FunboxName,
-} from "@monkeytype/schemas/configs";
-import { Mode } from "@monkeytype/schemas/shared";
+
+import { setConfig } from "../config/setters";
+import { Config } from "../config/store";
+import { configEvent } from "../events/config";
+
+import { ChallengeSettings, getChallenge } from "@monkeytype/challenges";
+import { ChallengeName } from "@monkeytype/schemas/challenges";
 import { CompletedEvent } from "@monkeytype/schemas/results";
+import { typedKeys } from "@monkeytype/util/objects";
+import { hideLoaderBar, showLoaderBar } from "../states/loader-bar";
+import {
+  isTestRestarting,
+  getLoadedChallenge,
+  setLoadedChallenge,
+} from "../states/test";
 import { areUnsortedArraysEqual } from "../utils/arrays";
-import { tryCatch } from "@monkeytype/util/trycatch";
-import { Challenge } from "@monkeytype/schemas/challenges";
 import { qs } from "../utils/dom";
 
 let challengeLoading = false;
 
 export function clearActive(): void {
   if (
-    TestState.activeChallenge &&
+    getLoadedChallenge() !== null &&
     !challengeLoading &&
-    !TestState.testRestarting
+    !isTestRestarting()
   ) {
-    Notifications.add("Challenge cleared", 0);
-    TestState.setActiveChallenge(null);
+    showNoticeNotification("Challenge cleared");
+    setLoadedChallenge(null);
   }
 }
 
 function verifyRequirement(
   result: CompletedEvent,
-  requirements: NonNullable<Challenge["requirements"]>,
-  requirementType: keyof NonNullable<Challenge["requirements"]>,
+  requirements: NonNullable<ChallengeSettings["requirements"]>,
+  requirementType: keyof NonNullable<ChallengeSettings["requirements"]>,
 ): [boolean, string[]] {
   let requirementsMet = true;
   let failReasons: string[] = [];
@@ -130,9 +131,9 @@ function verifyRequirement(
     }
   } else if (requirementType === "config" && requirements.config) {
     const requirementValue = requirements.config;
-    for (const configKey of Misc.typedKeys(requirementValue)) {
+    for (const configKey of typedKeys(requirementValue)) {
       const configValue = requirementValue[configKey];
-      if (Config[configKey as keyof ConfigType] !== configValue) {
+      if (Config[configKey] !== configValue) {
         requirementsMet = false;
         failReasons.push(`${configKey} not set to ${configValue}`);
       }
@@ -141,32 +142,31 @@ function verifyRequirement(
   return [requirementsMet, failReasons];
 }
 
-export function verify(result: CompletedEvent): string | null {
-  if (!TestState.activeChallenge) return null;
+export function verify(result: CompletedEvent): ChallengeName | null {
+  const loadedChallenge = getLoadedChallenge();
+
+  if (loadedChallenge === null) return null;
 
   try {
     const afk = (result.afkDuration / result.testDuration) * 100;
 
     if (afk > 10) {
-      Notifications.add(`Challenge failed: AFK time is greater than 10%`, 0);
+      showNoticeNotification(`Challenge failed: AFK time is greater than 10%`);
       return null;
     }
 
-    if (TestState.activeChallenge.requirements === undefined) {
-      Notifications.add(
-        `${TestState.activeChallenge.display} challenge passed!`,
-        1,
-      );
-      return TestState.activeChallenge.name;
+    if (loadedChallenge.settings?.requirements === undefined) {
+      showSuccessNotification(`${loadedChallenge.display} challenge passed!`);
+      return loadedChallenge.name || null;
     } else {
       let requirementsMet = true;
       const failReasons: string[] = [];
-      for (const requirementType of Misc.typedKeys(
-        TestState.activeChallenge.requirements,
+      for (const requirementType of typedKeys(
+        loadedChallenge.settings.requirements,
       )) {
         const [passed, requirementFailReasons] = verifyRequirement(
           result,
-          TestState.activeChallenge.requirements,
+          loadedChallenge.settings.requirements,
           requirementType,
         );
         if (!passed) {
@@ -175,73 +175,52 @@ export function verify(result: CompletedEvent): string | null {
         failReasons.push(...requirementFailReasons);
       }
       if (requirementsMet) {
-        if (TestState.activeChallenge.autoRole) {
-          Notifications.add(
+        if (loadedChallenge.settings.autoRole) {
+          showSuccessNotification(
             "You will receive a role shortly. Please don't post a screenshot in challenge submissions.",
-            1,
-            {
-              duration: 5,
-            },
+            { durationMs: 5000 },
           );
         }
-        Notifications.add(
-          `${TestState.activeChallenge.display} challenge passed!`,
-          1,
-        );
-        return TestState.activeChallenge.name;
+        showSuccessNotification(`${loadedChallenge.display} challenge passed!`);
+        return loadedChallenge.name;
       } else {
-        Notifications.add(
+        showNoticeNotification(
           `${
-            TestState.activeChallenge.display
+            loadedChallenge.display
           } challenge failed: ${failReasons.join(", ")}`,
-          0,
         );
         return null;
       }
     }
   } catch (e) {
     console.error(e);
-    Notifications.add(
+    showNoticeNotification(
       `Something went wrong when verifying challenge: ${(e as Error).message}`,
-      0,
     );
     return null;
   }
 }
 
-export async function setup(challengeName: string): Promise<boolean> {
+export async function setup(challengeName: ChallengeName): Promise<boolean> {
   challengeLoading = true;
 
   setConfig("funbox", []);
 
-  const { data: list, error } = await tryCatch(JSONData.getChallengeList());
-  if (error) {
-    const message = Misc.createErrorMessage(error, "Failed to setup challenge");
-    Notifications.add(message, -1);
-    ManualRestart.set();
-    setTimeout(() => {
-      qs("header .config")?.removeClass("hidden");
-      qs(".page.pageTest")?.removeClass("hidden");
-    }, 250);
-    return false;
-  }
+  const challenge = getChallenge(challengeName);
+  const settings = challenge.settings;
 
-  const challenge = list.find(
-    (c) => c.name.toLowerCase() === challengeName.toLowerCase(),
-  );
   let notitext;
   try {
-    if (challenge === undefined) {
-      Notifications.add("Challenge not found", 0);
-      ManualRestart.set();
+    if (challenge === undefined || settings === undefined) {
+      showNoticeNotification("Challenge not found or missing settings");
       setTimeout(() => {
-        qs("header .config")?.removeClass("hidden");
-        qs(".page.pageTest")?.removeClass("hidden");
+        qs("header .config")?.show();
+        qs(".page.pageTest")?.show();
       }, 250);
       return false;
     }
-    if (challenge.type === "customTime") {
-      setConfig("time", challenge.parameters[0] as number, {
+    if (settings.type === "customTime") {
+      setConfig("time", settings.parameters.time, {
         nosave: true,
       });
       setConfig("mode", "time", {
@@ -250,7 +229,7 @@ export async function setup(challengeName: string): Promise<boolean> {
       setConfig("difficulty", "normal", {
         nosave: true,
       });
-      if (challenge.name === "englishMaster") {
+      if (challengeName === "englishMaster") {
         setConfig("language", "english_10k", {
           nosave: true,
         });
@@ -261,8 +240,8 @@ export async function setup(challengeName: string): Promise<boolean> {
           nosave: true,
         });
       }
-    } else if (challenge.type === "customWords") {
-      setConfig("words", challenge.parameters[0] as number, {
+    } else if (settings.type === "customWords") {
+      setConfig("words", settings.parameters.words, {
         nosave: true,
       });
       setConfig("mode", "words", {
@@ -271,24 +250,22 @@ export async function setup(challengeName: string): Promise<boolean> {
       setConfig("difficulty", "normal", {
         nosave: true,
       });
-    } else if (challenge.type === "customText") {
-      CustomText.setText((challenge.parameters[0] as string).split(" "));
-      CustomText.setMode(challenge.parameters[1] as CustomTextMode);
-      CustomText.setLimitValue(challenge.parameters[2] as number);
-      CustomText.setLimitMode(challenge.parameters[3] as CustomTextLimitMode);
-      CustomText.setPipeDelimiter(challenge.parameters[4] as boolean);
+    } else if (settings.type === "customText") {
+      CustomText.setText(settings.parameters.text.split(" "));
+      CustomText.setMode(settings.parameters.mode);
+      CustomText.setLimitValue(settings.parameters.limit);
+      CustomText.setLimitMode(settings.parameters.limitMode);
+      CustomText.setPipeDelimiter(settings.parameters.isPipeDelimiter);
       setConfig("mode", "custom", {
         nosave: true,
       });
       setConfig("difficulty", "normal", {
         nosave: true,
       });
-    } else if (challenge.type === "script") {
-      Loader.show();
-      const response = await fetch(
-        "/challenges/" + (challenge.parameters[0] as string),
-      );
-      Loader.hide();
+    } else if (settings.type === "script") {
+      showLoaderBar();
+      const response = await fetch(`/challenges/${settings.parameters.script}`);
+      hideLoaderBar();
       if (response.status !== 200) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
@@ -306,13 +283,13 @@ export async function setup(challengeName: string): Promise<boolean> {
       setConfig("difficulty", "normal", {
         nosave: true,
       });
-      if (challenge.parameters[1] !== null) {
-        setConfig("theme", challenge.parameters[1] as ThemeName);
+      if (settings.parameters.theme !== undefined) {
+        setConfig("theme", settings.parameters.theme);
       }
-      if (challenge.parameters[2] !== null) {
-        void Funbox.activate(challenge.parameters[2] as FunboxName[]);
+      if (settings.parameters.funboxes !== undefined) {
+        void Funbox.activate(settings.parameters.funboxes);
       }
-    } else if (challenge.type === "accuracy") {
+    } else if (settings.type === "accuracy") {
       setConfig("time", 0, {
         nosave: true,
       });
@@ -322,82 +299,75 @@ export async function setup(challengeName: string): Promise<boolean> {
       setConfig("difficulty", "master", {
         nosave: true,
       });
-    } else if (challenge.type === "funbox") {
-      setConfig("funbox", challenge.parameters[0] as FunboxName[], {
-        nosave: true,
-      });
+    } else if (settings.type === "funbox") {
       setConfig("difficulty", "normal", {
         nosave: true,
       });
-      if (challenge.parameters[1] === "words") {
-        setConfig("words", challenge.parameters[2] as number, {
+      if (settings.parameters.mode === "words") {
+        setConfig("words", settings.parameters.mode2, {
           nosave: true,
         });
-      } else if (challenge.parameters[1] === "time") {
-        setConfig("time", challenge.parameters[2] as number, {
+      } else if (settings.parameters.mode === "time") {
+        setConfig("time", settings.parameters.mode2, {
           nosave: true,
         });
       }
-      setConfig("mode", challenge.parameters[1] as Mode, {
+      setConfig("mode", settings.parameters.mode, {
         nosave: true,
       });
-      if (challenge.parameters[3] !== undefined) {
-        setConfig("difficulty", challenge.parameters[3] as Difficulty, {
+      if (settings.parameters.difficulty !== undefined) {
+        setConfig("difficulty", settings.parameters.difficulty, {
           nosave: true,
         });
       }
-    } else if (challenge.type === "special") {
-      if (challenge.name === "semimak") {
-        // so can you make a link that sets up 120s, 10k, punct, stop on word, and semimak as the layout?
-        setConfig("mode", "time", {
+
+      if (
+        !setConfig("funbox", [settings.parameters.funbox], {
+          nosave: true,
+        })
+      ) {
+        throw new Error("Can't load challenge with current config");
+      }
+    } else if (settings.type === "other") {
+      if (challengeName === "wingdings") {
+        // Ten Words of Pain: 10-word Master mode test using the Wingdings custom font, no keymap
+        setConfig("mode", "words", {
           nosave: true,
         });
-        setConfig("time", 120, {
+        setConfig("words", 10, {
           nosave: true,
         });
-        setConfig("language", "english_10k", {
+        setConfig("difficulty", "master", {
           nosave: true,
         });
-        setConfig("punctuation", true, {
+        setConfig("fontFamily", "Wingdings", {
           nosave: true,
         });
-        setConfig("stopOnError", "word", {
-          nosave: true,
-        });
-        setConfig("layout", "semimak", {
-          nosave: true,
-        });
-        setConfig("keymapLayout", "overrideSync", {
-          nosave: true,
-        });
-        setConfig("keymapMode", "static", {
+        setConfig("keymapMode", "off", {
           nosave: true,
         });
       }
     }
-    ManualRestart.set();
-    notitext = challenge.message;
-    qs("header .config")?.removeClass("hidden");
-    qs(".page.pageTest")?.removeClass("hidden");
+    notitext = settings.message;
+    qs("header .config")?.show();
+    qs(".page.pageTest")?.show();
 
     if (notitext === undefined) {
-      Notifications.add(`Challenge '${challenge.display}' loaded.`, 0);
+      showSuccessNotification(`Challenge '${challenge.display}' loaded.`);
     } else {
-      Notifications.add("Challenge loaded. " + notitext, 0);
+      showSuccessNotification(`Challenge loaded. ${notitext}`);
     }
-    TestState.setActiveChallenge(challenge);
-    challengeLoading = false;
+    setLoadedChallenge(challenge);
     return true;
   } catch (e) {
-    Notifications.add(
-      Misc.createErrorMessage(e, "Failed to load challenge"),
-      -1,
-    );
+    showErrorNotification("Failed to load challenge", { error: e });
     return false;
+  } finally {
+    challengeLoading = false;
   }
 }
 
-ConfigEvent.subscribe(({ key }) => {
+configEvent.subscribe(({ key }) => {
   if (
     [
       "difficulty",
@@ -414,6 +384,7 @@ ConfigEvent.subscribe(({ key }) => {
       "keymapMode",
       "keymapLayout",
       "layout",
+      "fontFamily",
     ].includes(key)
   ) {
     clearActive();

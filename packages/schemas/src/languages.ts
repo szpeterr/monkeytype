@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KnownFontNameSchema } from "./fonts";
 import { customEnumErrorHandler } from "./util";
 
 export const LanguageSchema = z.enum(
@@ -55,6 +56,10 @@ export const LanguageSchema = z.enum(
     "chinese_simplified_10k",
     "chinese_simplified_50k",
     "chinese_traditional",
+    "chinese_traditional_1k",
+    "chinese_traditional_5k",
+    "chinese_traditional_10k",
+    "chinese_traditional_50k",
     "russian",
     "russian_1k",
     "russian_5k",
@@ -110,6 +115,7 @@ export const LanguageSchema = z.enum(
     "greek_5k",
     "greek_10k",
     "greek_25k",
+    "greek_koine",
     "greeklish",
     "greeklish_1k",
     "greeklish_5k",
@@ -119,6 +125,7 @@ export const LanguageSchema = z.enum(
     "turkish_1k",
     "turkish_5k",
     "irish",
+    "irish_1k",
     "italian",
     "italian_1k",
     "italian_7k",
@@ -217,6 +224,9 @@ export const LanguageSchema = z.enum(
     "pinyin_10k",
     "hausa",
     "hausa_1k",
+    "bemba",
+    "bemba_1k",
+    "bemba_10k",
     "swedish",
     "swedish_1k",
     "swedish_diacritics",
@@ -266,6 +276,7 @@ export const LanguageSchema = z.enum(
     "urdu",
     "urdu_1k",
     "urdu_5k",
+    "urdu_roman",
     "urdish",
     "albanian",
     "albanian_1k",
@@ -430,6 +441,15 @@ export const LanguageSchema = z.enum(
     "code_abap_1k",
     "code_yoptascript",
     "code_cuda",
+    "kinyarwanda",
+    "pokemon_1k",
+    "kokanu",
+    "likanu",
+    "code_vhdl",
+    "lao",
+    "code_6502_assembly",
+    "english_legal",
+    "sindhi",
   ],
   {
     errorMap: customEnumErrorHandler("Must be a supported language"),
@@ -443,13 +463,14 @@ export const LanguageObjectSchema = z
     name: LanguageSchema,
     rightToLeft: z.boolean().optional(),
     noLazyMode: z.boolean().optional(),
-    ligatures: z.boolean().optional(),
+    joiningScript: z.boolean().optional(),
     orderedByFrequency: z.boolean().optional(),
     words: z.array(z.string()).min(1),
     additionalAccents: z
       .array(z.tuple([z.string().min(1), z.string().min(1)]))
       .optional(),
     bcp47: z.string().optional(),
+    preferredFont: KnownFontNameSchema.optional(),
     originalPunctuation: z.boolean().optional(),
   })
   .strict();

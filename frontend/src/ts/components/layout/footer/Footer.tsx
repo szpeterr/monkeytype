@@ -1,91 +1,106 @@
 import { JSXElement } from "solid-js";
-import { VersionButton } from "./VersionButton";
+
+import { getIsScreenshotting } from "../../../states/core";
+import { showModal } from "../../../states/modals";
+import { getFocus } from "../../../states/test";
+import { cn } from "../../../utils/cn";
 import { Button } from "../../common/Button";
-import { showModal } from "../../../stores/modals";
-import "./Footer.scss";
+import { Keytips } from "./Keytips";
 import { ThemeIndicator } from "./ThemeIndicator";
-import { ScrollToTop } from "./ScrollToTop";
+import { VersionButton } from "./VersionButton";
 
 export function Footer(): JSXElement {
   return (
-    <footer>
-      <ScrollToTop />
+    <footer
+      class={cn("relative text-xs text-sub", {
+        "opacity-0": getIsScreenshotting(),
+      })}
+    >
+      <Keytips />
+
       <div
-        id="commandLineMobileButton"
-        onClick={() => {
-          showModal("Commandline");
+        class="-m-2 flex justify-between gap-8 transition-opacity"
+        classList={{
+          "opacity-0": getFocus(),
         }}
       >
-        <i class="fas fa-terminal"></i>
-      </div>
-
-      <div class="keyTips">
-        <kbd>tab</kbd> and <kbd>enter</kbd> - restart test
-        <br />
-        <kbd>ctrl/cmd</kbd> + <kbd>shift</kbd> + <kbd>p</kbd> or <kbd>esc</kbd>{" "}
-        - command line
-      </div>
-
-      <div class="leftright">
-        <div class="left">
+        <div class="grid grid-cols-1 justify-items-start xs:grid-cols-2 sm:grid-cols-4 lg:flex">
           <Button
-            type="text"
+            variant="text"
             text="contact"
-            icon="fas fa-envelope"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-envelope",
+              fixedWidth: true,
+            }}
             onClick={() => showModal("Contact")}
           />
           <Button
-            type="text"
+            variant="text"
             text="support"
-            icon="fas fa-donate"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-donate",
+              fixedWidth: true,
+            }}
             onClick={() => showModal("Support")}
           />
           <Button
-            type="text"
+            variant="text"
             text="github"
-            icon="fas fa-code"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-code",
+              fixedWidth: true,
+            }}
             href="https://github.com/monkeytypegame/monkeytype"
           />
           <Button
-            type="text"
+            variant="text"
             text="discord"
-            icon="fab fa-discord"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-discord",
+              variant: "brand",
+              fixedWidth: true,
+            }}
             href="https://www.discord.gg/monkeytype"
           />
           <Button
-            type="text"
+            variant="text"
             text="twitter"
-            icon="fab fa-twitter"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-twitter",
+              variant: "brand",
+              fixedWidth: true,
+            }}
             href="https://x.com/monkeytype"
           />
           <Button
-            type="text"
+            variant="text"
             text="terms"
-            icon="fas fa-file-contract"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-file-contract",
+              fixedWidth: true,
+            }}
             href="/terms-of-service.html"
           />
           <Button
             href="/security-policy.html"
-            type="text"
+            variant="text"
             text="security"
-            icon="fas fa-shield-alt"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-shield-alt",
+              fixedWidth: true,
+            }}
           />
           <Button
             href="/privacy-policy.html"
-            type="text"
+            variant="text"
             text="privacy"
-            icon="fas fa-lock"
-            fixedWidthIcon
+            fa={{
+              icon: "fa-lock",
+              fixedWidth: true,
+            }}
           />
         </div>
-        <div class="right">
+        <div class="flex flex-col items-end text-right lg:flex-row">
           <ThemeIndicator />
           <VersionButton />
         </div>

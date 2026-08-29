@@ -1,41 +1,30 @@
-import Config from "../../config";
-import * as TestInput from "../../test/test-input";
+import { Config } from "../../config/store";
 import * as TestLogic from "../../test/test-logic";
 import { getCharFromEvent } from "../../test/layout-emulator";
-import * as Monkey from "../../test/monkey";
 import { emulateInsertText } from "./insert-text";
-import * as TestState from "../../test/test-state";
-import * as TestWords from "../../test/test-words";
-import * as JSONData from "../../utils/json-data";
-import * as Notifications from "../../elements/notifications";
+import {
+  showNoticeNotification,
+  showErrorNotification,
+} from "../../states/notifications";
 import * as KeyConverter from "../../utils/key-converter";
 import * as ShiftTracker from "../../test/shift-tracker";
-import * as ManualRestart from "../../test/manual-restart-tracker";
 import { canQuickRestart } from "../../utils/quick-restart";
 import * as CustomText from "../../test/custom-text";
-import * as CustomTextState from "../../states/custom-text-name";
 import {
   getLastBailoutAttempt,
   setCorrectShiftUsed,
   setLastBailoutAttempt,
 } from "../state";
-import {
-  getActiveFunboxesWithFunction,
-  getActiveFunboxNames,
-} from "../../test/funbox/list";
+import { getActiveFunboxesWithFunction } from "../../test/funbox/list";
+import { Keycode } from "../../constants/keys";
+import { __nonReactive, setBailedOut, wordsHaveTab } from "../../states/test";
+
+import { getCustomTextIndicator } from "../../states/core";
+import { logTestEvent } from "../../test/events/data";
+import { getTestEventCode } from "../../test/events/helpers";
 
 export async function handleTab(e: KeyboardEvent, now: number): Promise<void> {
-  if (Config.quickRestart === "tab") {
-    e.preventDefault();
-    if ((TestWords.hasTab && e.shiftKey) || !TestWords.hasTab) {
-      if (e.shiftKey) {
-        ManualRestart.set();
-      }
-      TestLogic.restart();
-      return;
-    }
-  }
-  if (TestWords.hasTab) {
+  if (wordsHaveTab() && !e.shiftKey) {
     await emulateInsertText({ data: "\t", now });
     e.preventDefault();
     return;
@@ -56,40 +45,28 @@ export async function handleEnter(
         Config.words,
         Config.time,
         CustomText.getData(),
-        CustomTextState.isCustomTextLong() ?? false,
+        getCustomTextIndicator()?.isLong ?? false,
       )
     ) {
       const delay = Date.now() - getLastBailoutAttempt();
       if (getLastBailoutAttempt() === -1 || delay > 200) {
         setLastBailoutAttempt(Date.now());
         if (delay >= 5000) {
-          Notifications.add(
+          showNoticeNotification(
             "Please double tap shift+enter to confirm bail out",
-            0,
             {
               important: true,
-              duration: 5,
+              durationMs: 5000,
             },
           );
         }
         e.preventDefault();
         return;
       } else {
-        TestState.setBailedOut(true);
+        setBailedOut(true);
         void TestLogic.finish();
         return;
       }
-    }
-  }
-
-  if (Config.quickRestart === "enter") {
-    e.preventDefault();
-    if ((TestWords.hasNewline && e.shiftKey) || !TestWords.hasNewline) {
-      if (e.shiftKey) {
-        ManualRestart.set();
-      }
-      TestLogic.restart();
-      return;
     }
   }
 }
@@ -99,28 +76,22 @@ export async function handleOppositeShift(event: KeyboardEvent): Promise<void> {
     Config.oppositeShiftMode === "keymap" &&
     Config.keymapLayout !== "overrideSync"
   ) {
-    let keymapLayout = await JSONData.getLayout(Config.keymapLayout).catch(
-      () => undefined,
-    );
+    let keymapLayout = await __nonReactive
+      .getKeymapLayout()
+      .catch(() => undefined);
     if (keymapLayout === undefined) {
-      Notifications.add("Failed to load keymap layout", -1);
+      showErrorNotification("Failed to load keymap layout");
 
       return;
     }
 
-    const funbox = getActiveFunboxNames().includes("layout_mirror");
-    if (funbox) {
-      keymapLayout = KeyConverter.mirrorLayoutKeys(keymapLayout);
-    }
-
     const keycode = KeyConverter.layoutKeyToKeycode(event.key, keymapLayout);
-
     setCorrectShiftUsed(
       keycode === undefined ? true : ShiftTracker.isUsingOppositeShift(keycode),
     );
   } else {
     setCorrectShiftUsed(
-      ShiftTracker.isUsingOppositeShift(event.code as KeyConverter.Keycode),
+      ShiftTracker.isUsingOppositeShift(event.code as Keycode),
     );
   }
 }
@@ -144,8 +115,20 @@ async function handleFunboxes(
 }
 
 export async function onKeydown(event: KeyboardEvent): Promise<void> {
+  if (event.repeat) {
+    // just ignore all repeats
+    return;
+  }
+
   const now = performance.now();
-  TestInput.recordKeydownTime(now, event);
+
+  logTestEvent("keydown", now, {
+    code: getTestEventCode(event),
+    ctrl: event.ctrlKey ? true : undefined,
+    shift: event.shiftKey ? true : undefined,
+    alt: event.altKey ? true : undefined,
+    meta: event.metaKey ? true : undefined,
+  });
 
   // allow arrows in arrows funbox
   const arrowsActive = Config.funbox.includes("arrows");
@@ -179,14 +162,6 @@ export async function onKeydown(event: KeyboardEvent): Promise<void> {
     }
   }
 
-  if (!event.repeat) {
-    //delaying because type() is called before show()
-    // meaning the first keypress of the test is not animated
-    setTimeout(() => {
-      Monkey.type(event);
-    }, 0);
-  }
-
   if (event.key === "Tab") {
     await handleTab(event, now);
     return;
@@ -194,17 +169,6 @@ export async function onKeydown(event: KeyboardEvent): Promise<void> {
 
   if (event.key === "Enter") {
     await handleEnter(event, now);
-    return;
-  }
-
-  if (event.key === "Escape" && Config.quickRestart === "esc") {
-    event.preventDefault();
-
-    if (event.shiftKey) {
-      ManualRestart.set();
-    }
-
-    TestLogic.restart();
     return;
   }
 }

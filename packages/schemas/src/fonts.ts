@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { customEnumErrorHandler } from "./util";
 
-const KnownFontNameSchema = z.enum(
+export const KnownFontNameSchema = z.enum(
   [
     "Roboto_Mono",
     "Noto_Naskh_Arabic",
@@ -42,6 +42,10 @@ const KnownFontNameSchema = z.enum(
     "Geist_Mono",
     "Iosevka",
     "Proto",
+    "Adwaita_Mono",
+    "Inter_Tight",
+    "Space_Grotesk",
+    "Noto_Sans_Lao",
   ],
   {
     errorMap: customEnumErrorHandler("Must be a known font family"),

@@ -1,55 +1,64 @@
-import { JSXElement, createResource, For } from "solid-js";
-import { format } from "date-fns/format";
-import { getReleasesFromGitHub } from "../../utils/json-data";
+import { LiteDebouncer } from "@tanstack/pacer-lite/lite-debouncer";
+import { useInfiniteQuery } from "@tanstack/solid-query";
+import { For, JSXElement, Show } from "solid-js";
+
+import { getVersionHistoryQueryOptions } from "../../queries/public";
+import { isModalOpen } from "../../states/modals";
 import { AnimatedModal } from "../common/AnimatedModal";
-import "./VersionHistoryModal.scss";
 import AsyncContent from "../common/AsyncContent";
-import { isModalOpen } from "../../stores/modals";
+import { LoadingCircle } from "../common/LoadingCircle";
 
 export function VersionHistoryModal(): JSXElement {
   const isOpen = (): boolean => isModalOpen("VersionHistory");
-  const [releases] = createResource(isOpen, async (open) => {
-    if (!open) return null;
-    const releases = await getReleasesFromGitHub();
-    const data = [];
-    for (const release of releases) {
-      if (release.draft || release.prerelease) continue;
 
-      let body = release.body;
+  const releases = useInfiniteQuery(() => ({
+    ...getVersionHistoryQueryOptions(),
+    enabled: isOpen(),
+  }));
 
-      body = body.replace(/\r\n/g, "<br>");
-      //replace ### title with h3 title h3
-      body = body.replace(/### (.*?)<br>/g, "<h3>$1</h3>");
-      body = body.replace(/<\/h3><br>/gi, "</h3>");
-      //remove - at the start of a line
-      body = body.replace(/^- /gm, "");
-      //replace **bold** with bold
-      body = body.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-      //replace links with a tags
-      body = body.replace(
-        /\[(.*?)\]\((.*?)\)/g,
-        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-      );
+  const debouncedFetch = new LiteDebouncer(
+    (callback: () => void) => callback(),
+    { wait: 150 },
+  );
 
-      data.push({
-        name: release.name,
-        publishedAt: format(new Date(release.published_at), "dd MMM yyyy"),
-        bodyHTML: body,
-      });
-    }
-    return data;
-  });
+  const fetchMoreVersions = (e: Event): void => {
+    const element = e.target as HTMLElement;
+
+    debouncedFetch.maybeExecute(() => {
+      if (
+        element.scrollHeight - element.scrollTop - element.clientHeight < 10 &&
+        releases.hasNextPage &&
+        !releases.isLoading
+      ) {
+        void releases.fetchNextPage();
+      }
+    });
+  };
 
   return (
-    <AnimatedModal id="VersionHistory">
+    <AnimatedModal
+      id="VersionHistory"
+      modalClass="max-w-6xl"
+      onScroll={fetchMoreVersions}
+    >
       <AsyncContent
-        resource={releases}
+        queries={{ releases }}
         errorMessage="Failed to load version history"
       >
-        {(data) => (
-          <div class="releases">
-            <For each={data}>{(release) => <ReleaseItem {...release} />}</For>
-          </div>
+        {({ releasesData }) => (
+          <>
+            <div class="releases">
+              <For each={releasesData().pages.flatMap((it) => it.releases)}>
+                {(release) => <ReleaseItem {...release} />}
+              </For>
+            </div>
+
+            <div class="mb-8 text-center text-2xl">
+              <Show when={releases.isFetching}>
+                <LoadingCircle color="sub" />
+              </Show>
+            </div>
+          </>
         )}
       </AsyncContent>
     </AnimatedModal>
@@ -61,16 +70,15 @@ function ReleaseItem(props: {
   publishedAt: string;
   bodyHTML: string;
 }): JSXElement {
-  const setBodyHTML = (el: HTMLDivElement): void => {
-    el.innerHTML = props.bodyHTML;
-  };
-
   return (
-    <div class="release">
-      <div class="title">{props.name}</div>
-      <div class="date">{props.publishedAt}</div>
-      {/* oxlint-disable-next-line solid/reactivity */}
-      <div class="body" ref={setBodyHTML}></div>
+    <div class="grid gap-4">
+      <div class="flex place-items-center justify-between">
+        <div class="text-4xl text-main">{props.name}</div>
+        <div class="text-sub">{props.publishedAt}</div>
+      </div>
+      {/* oxlint-disable-next-line solid/no-innerhtml */}
+      <div innerHTML={props.bodyHTML}></div>
+      <div class="mt-4 mb-16 h-1 w-full rounded bg-sub-alt"></div>
     </div>
   );
 }

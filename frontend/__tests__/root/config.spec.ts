@@ -1,21 +1,26 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
-import * as Config from "../../src/ts/config";
+import * as Config from "../../src/ts/config/setters";
+import * as Lifecycle from "../../src/ts/config/lifecycle";
+import * as ConfigUtils from "../../src/ts/config/utils";
+import { __testing } from "../../src/ts/config/testing";
 import * as Misc from "../../src/ts/utils/misc";
+import * as Env from "../../src/ts/utils/env";
 import {
   ConfigKey,
   Config as ConfigType,
   CaretStyleSchema,
 } from "@monkeytype/schemas/configs";
-import * as FunboxValidation from "../../src/ts/test/funbox/funbox-validation";
-import * as ConfigValidation from "../../src/ts/config-validation";
-import * as ConfigEvent from "../../src/ts/observables/config-event";
-import * as DB from "../../src/ts/db";
-import * as AccountButton from "../../src/ts/elements/account-button";
-import * as Notifications from "../../src/ts/elements/notifications";
-const { replaceConfig, getConfig } = Config.__testing;
+import * as FunboxValidation from "../../src/ts/config/funbox-validation";
+import * as ConfigValidation from "../../src/ts/config/validation";
+import { configEvent } from "../../src/ts/events/config";
+import * as ApeConfig from "../../src/ts/ape/config";
+import * as Notifications from "../../src/ts/states/notifications";
+import * as TestState from "../../src/ts/states/test";
+
+const { replaceConfig, getConfig } = __testing;
 
 describe("Config", () => {
-  const isDevEnvironmentMock = vi.spyOn(Misc, "isDevEnvironment");
+  const isDevEnvironmentMock = vi.spyOn(Env, "isDevEnvironment");
   beforeEach(() => {
     isDevEnvironmentMock.mockClear();
     replaceConfig({});
@@ -30,35 +35,35 @@ describe("Config", () => {
       ConfigValidation,
       "isConfigValueValid",
     );
-    const dispatchConfigEventMock = vi.spyOn(ConfigEvent, "dispatch");
-    const dbSaveConfigMock = vi.spyOn(DB, "saveConfig");
-    const accountButtonLoadingMock = vi.spyOn(AccountButton, "loading");
-    const notificationAddMock = vi.spyOn(Notifications, "add");
+    const dispatchConfigEventMock = vi.spyOn(configEvent, "dispatch");
+    const dbSaveConfigMock = vi.spyOn(ApeConfig, "saveConfig");
+    const notificationAddMock = vi.spyOn(
+      Notifications,
+      "showNoticeNotification",
+    );
     const miscReloadAfterMock = vi.spyOn(Misc, "reloadAfter");
     const miscTriggerResizeMock = vi.spyOn(Misc, "triggerResize");
+    const stateIsTestActiveMock = vi.spyOn(TestState, "isTestActive");
 
     const mocks = [
       canSetConfigWithCurrentFunboxesMock,
       isConfigValueValidMock,
       dispatchConfigEventMock,
       dbSaveConfigMock,
-      accountButtonLoadingMock,
       notificationAddMock,
       miscReloadAfterMock,
       miscTriggerResizeMock,
+      stateIsTestActiveMock,
     ];
 
     beforeEach(async () => {
       vi.useFakeTimers();
       mocks.forEach((it) => it.mockClear());
 
-      vi.mock("../../src/ts/test/test-state", () => ({
-        isActive: true,
-      }));
-
       isConfigValueValidMock.mockReturnValue(true);
       canSetConfigWithCurrentFunboxesMock.mockReturnValue(true);
       dbSaveConfigMock.mockResolvedValue();
+      stateIsTestActiveMock.mockReturnValue(true);
 
       replaceConfig({});
     });
@@ -73,9 +78,7 @@ describe("Config", () => {
     it("should throw if config key in not found in metadata", () => {
       expect(() => {
         Config.setConfig("nonExistentKey" as ConfigKey, true);
-      }).toThrowError(
-        `Config metadata for key "nonExistentKey" is not defined.`,
-      );
+      }).toThrow(`Config metadata for key "nonExistentKey" is not defined.`);
     });
 
     it("fails if test is active and funbox no_quit", () => {
@@ -92,7 +95,6 @@ describe("Config", () => {
       //THEN
       expect(notificationAddMock).toHaveBeenCalledWith(
         "No quit funbox is active. Please finish the test.",
-        0,
         {
           important: true,
         },
@@ -106,6 +108,50 @@ describe("Config", () => {
 
       //WHEN / THEN
       expect(Config.setConfig("showAllLines", true)).toBe(false);
+    });
+
+    it("disables live text stats when enabling monkey", () => {
+      //GIVEN
+      replaceConfig({
+        liveSpeedStyle: "text",
+        liveAccStyle: "text",
+        monkey: false,
+      });
+
+      //WHEN / THEN
+      expect(Config.setConfig("monkey", true)).toBe(true);
+      expect(getConfig()).toMatchObject({
+        monkey: true,
+        liveSpeedStyle: "mini",
+        liveAccStyle: "mini",
+      });
+      expect(notificationAddMock).not.toHaveBeenCalled();
+    });
+
+    it("disables monkey when enabling live speed text", () => {
+      //GIVEN
+      replaceConfig({ monkey: true, liveSpeedStyle: "off" });
+
+      //WHEN / THEN
+      expect(Config.setConfig("liveSpeedStyle", "text")).toBe(true);
+      expect(getConfig()).toMatchObject({
+        monkey: false,
+        liveSpeedStyle: "text",
+      });
+      expect(notificationAddMock).not.toHaveBeenCalled();
+    });
+
+    it("disables monkey when enabling live accuracy text", () => {
+      //GIVEN
+      replaceConfig({ monkey: true, liveAccStyle: "off" });
+
+      //WHEN / THEN
+      expect(Config.setConfig("liveAccStyle", "text")).toBe(true);
+      expect(getConfig()).toMatchObject({
+        monkey: false,
+        liveAccStyle: "text",
+      });
+      expect(notificationAddMock).not.toHaveBeenCalled();
     });
 
     it("should use overrideValue", () => {
@@ -182,14 +228,8 @@ describe("Config", () => {
       //wait for debounce
       await vi.advanceTimersByTimeAsync(2500);
 
-      //show loading
-      expect(accountButtonLoadingMock).toHaveBeenNthCalledWith(1, true);
-
       //save
       expect(dbSaveConfigMock).toHaveBeenCalledWith({ numbers: true });
-
-      //hide loading
-      expect(accountButtonLoadingMock).toHaveBeenNthCalledWith(2, false);
     });
 
     it("saves configOverride values to localstorage if nosave=false", async () => {
@@ -224,7 +264,6 @@ describe("Config", () => {
       //wait for debounce
       await vi.advanceTimersByTimeAsync(2500);
 
-      expect(accountButtonLoadingMock).not.toHaveBeenCalled();
       expect(dbSaveConfigMock).not.toHaveBeenCalled();
     });
 
@@ -279,7 +318,6 @@ describe("Config", () => {
       //THEN
       expect(notificationAddMock).toHaveBeenCalledWith(
         "Ad settings changed. Refreshing...",
-        0,
       );
       expect(miscReloadAfterMock).toHaveBeenCalledWith(3);
     });
@@ -291,7 +329,7 @@ describe("Config", () => {
       replaceConfig({
         mode: "words",
       });
-      await Config.applyConfig({
+      await Lifecycle.applyConfig({
         numbers: true,
         punctuation: true,
       });
@@ -336,7 +374,7 @@ describe("Config", () => {
       ];
 
       it.each(testCases)("$display", async ({ value, expected }) => {
-        await Config.applyConfig(value);
+        await Lifecycle.applyConfig(value);
 
         const config = getConfig();
         const applied = Object.fromEntries(
@@ -373,7 +411,7 @@ describe("Config", () => {
       ];
 
       it.each(testCases)("$display", async ({ value, expected }) => {
-        await Config.applyConfig(value);
+        await Lifecycle.applyConfig(value);
         const config = getConfig();
         const applied = Object.fromEntries(
           Object.entries(config).filter(([key]) =>
@@ -388,8 +426,8 @@ describe("Config", () => {
       replaceConfig({
         numbers: true,
       });
-      await Config.applyConfig({
-        ...Config.getConfigChanges(),
+      await Lifecycle.applyConfig({
+        ...ConfigUtils.getConfigChanges(),
         punctuation: true,
       });
       const config = getConfig();
@@ -400,7 +438,7 @@ describe("Config", () => {
       replaceConfig({
         minWpm: "off",
       });
-      await Config.applyConfig({
+      await Lifecycle.applyConfig({
         minWpmCustomSpeed: 100,
       });
       const config = getConfig();
@@ -412,7 +450,7 @@ describe("Config", () => {
       replaceConfig({
         minWpm: "off",
       });
-      await Config.applyConfig({
+      await Lifecycle.applyConfig({
         minWpm: "custom",
         minWpmCustomSpeed: 100,
       });
@@ -423,7 +461,7 @@ describe("Config", () => {
 
     it("should keep the keymap off when applying keymapLayout", async () => {
       replaceConfig({});
-      await Config.applyConfig({
+      await Lifecycle.applyConfig({
         keymapLayout: "qwerty",
       });
       const config = getConfig();

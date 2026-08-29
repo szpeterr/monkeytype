@@ -23,10 +23,10 @@ describe("dom", () => {
       ): void {
         const parent = options?.parent ?? qsr("#parent");
         parent?.onChild(event, selector, (e) =>
+          // oxlint-disable-next-line typescript/no-unsafe-return
           handler({
             target: e.target,
             childTarget: e.childTarget,
-            //@ts-expect-error will be added later, check TODO on the ChildEvent
             currentTarget: e.currentTarget,
           }),
         );
@@ -130,10 +130,6 @@ describe("dom", () => {
         await userEvent.click(clickTarget);
 
         //THEN
-
-        //This is the same behavior as jQuery `.on` with selector.
-        //The handler will be called two times,
-        //It does NOT call on the <section> or the parent element itself
         expect(handler).toHaveBeenCalledTimes(2);
 
         //First call is for childTarget inner2 (grand child of parent)

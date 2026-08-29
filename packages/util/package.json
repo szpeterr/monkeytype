@@ -19,12 +19,13 @@
   "devDependencies": {
     "@monkeytype/tsup-config": "workspace:*",
     "@monkeytype/typescript-config": "workspace:*",
+    "@types/node": "24.9.1",
     "madge": "8.0.0",
-    "oxlint": "1.39.0",
-    "oxlint-tsgolint": "0.11.0",
+    "oxlint": "1.77.0",
+    "oxlint-tsgolint": "7.0.2001",
     "tsup": "8.4.0",
-    "typescript": "5.9.3",
-    "vitest": "4.0.15",
+    "typescript": "7.0.2",
+    "vitest": "4.1.0",
     "zod": "3.23.8"
   }
 }

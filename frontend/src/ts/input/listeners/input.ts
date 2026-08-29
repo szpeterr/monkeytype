@@ -9,11 +9,15 @@ import {
 import * as TestUI from "../../test/test-ui";
 import { onBeforeInsertText } from "../handlers/before-insert-text";
 import { onBeforeDelete } from "../handlers/before-delete";
-import * as TestInput from "../../test/test-input";
 import * as TestWords from "../../test/test-words";
-import * as CompositionState from "../../states/composition";
-import { activeWordIndex } from "../../test/test-state";
-import { areAllTestWordsGenerated } from "../../test/test-logic";
+import * as CompositionState from "../../legacy-states/composition";
+import {
+  isTestRestarting,
+  getActiveWordIndex,
+  isResultCalculating,
+} from "../../states/test";
+import { getCurrentInput } from "../../test/events/data";
+import { areAllWordsGenerated } from "../../test/words-generator";
 
 const inputEl = getInputElement();
 
@@ -67,7 +71,7 @@ inputEl.addEventListener("beforeinput", async (event) => {
       event.preventDefault();
     }
   } else {
-    throw new Error("Unhandled beforeinput type: " + inputType);
+    throw new Error(`Unhandled beforeinput type: ${inputType}`);
   }
 });
 
@@ -75,6 +79,8 @@ inputEl.addEventListener("input", async (event) => {
   if (!(event instanceof InputEvent)) {
     //since the listener is on an input element, this should never trigger
     //but its here to narrow the type of "event"
+    //@ts-expect-error type narrowing
+    // oxlint-disable-next-line typescript/no-unsafe-call
     event.preventDefault();
     return;
   }
@@ -91,6 +97,9 @@ inputEl.addEventListener("input", async (event) => {
     event.preventDefault();
     return;
   }
+
+  // just in case before input doesn't catch this
+  if (isResultCalculating() || isTestRestarting()) return;
 
   const now = performance.now();
 
@@ -114,23 +123,23 @@ inputEl.addEventListener("input", async (event) => {
     inputType === "deleteWordBackward" ||
     inputType === "deleteContentBackward"
   ) {
-    onDelete(inputType);
+    onDelete(inputType, now);
   } else if (
     inputType === "insertCompositionText" ||
     inputType === "insertFromComposition"
   ) {
-    const allWordsTyped = activeWordIndex >= TestWords.words.length - 1;
+    const allWordsTyped = getActiveWordIndex() >= TestWords.words.length - 1;
     const inputPlusComposition =
-      TestInput.input.current + (CompositionState.getData() ?? "");
+      getCurrentInput() + (CompositionState.getData() ?? "");
     const inputPlusCompositionIsCorrect =
-      TestWords.words.getCurrent() === inputPlusComposition;
+      TestWords.words.getCurrent()?.textWithCommit === inputPlusComposition;
 
     // composition quick end
     // if the user typed the entire word correctly but is still in composition
     // dont wait for them to end the composition manually, just end the test
     // by dispatching a compositionend which will trigger onInsertText
     if (
-      areAllTestWordsGenerated() &&
+      areAllWordsGenerated() &&
       allWordsTyped &&
       inputPlusCompositionIsCorrect
     ) {
@@ -145,6 +154,6 @@ inputEl.addEventListener("input", async (event) => {
       TestUI.afterTestCompositionUpdate();
     }
   } else {
-    throw new Error("Unhandled input type: " + inputType);
+    throw new Error(`Unhandled input type: ${inputType}`);
   }
 });

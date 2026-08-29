@@ -92,6 +92,15 @@ export type TimerOpacity = z.infer<typeof TimerOpacitySchema>;
 export const StopOnErrorSchema = z.enum(["off", "word", "letter"]);
 export type StopOnError = z.infer<typeof StopOnErrorSchema>;
 
+export const DeleteOnErrorSchema = z.enum([
+  "off",
+  "letter",
+  "letter_hard",
+  "word",
+  "word_hard",
+]);
+export type DeleteOnError = z.infer<typeof DeleteOnErrorSchema>;
+
 export const KeymapModeSchema = z.enum(["off", "static", "react", "next"]);
 export type KeymapMode = z.infer<typeof KeymapModeSchema>;
 
@@ -114,8 +123,12 @@ export const KeymapLegendStyleSchema = z.enum([
 ]);
 export type KeymapLegendStyle = z.infer<typeof KeymapLegendStyleSchema>;
 
-export const KeymapShowTopRowSchema = z.enum(["always", "layout", "never"]);
-export type KeymapShowTopRow = z.infer<typeof KeymapShowTopRowSchema>;
+export const KeymapKeysSchema = z.enum([
+  "minimal", //showTopRow=layout or showTopRow=never
+  "minimal_numrow", //showTopRow=always
+  "full", //include extra keys
+]);
+export type KeymapKeys = z.infer<typeof KeymapKeysSchema>;
 
 export const KeymapSizeSchema = z.number().min(0.5).max(3.5).step(0.1);
 export type KeymapSize = z.infer<typeof KeymapSizeSchema>;
@@ -144,6 +157,16 @@ export const PlaySoundOnClickSchema = z.enum([
   "14",
   "15",
   "16",
+  "17",
+  "18",
+  "19",
+  "20",
+  "21",
+  "22",
+  "23",
+  "24",
+  "25",
+  "26",
 ]);
 export type PlaySoundOnClick = z.infer<typeof PlaySoundOnClickSchema>;
 
@@ -181,6 +204,9 @@ export const HighlightModeSchema = z.enum([
   "next_three_words",
 ]);
 export type HighlightMode = z.infer<typeof HighlightModeSchema>;
+
+export const TypedEffectSchema = z.enum(["keep", "hide", "fade", "dots"]);
+export type TypedEffect = z.infer<typeof TypedEffectSchema>;
 
 export const TapeModeSchema = z.enum(["off", "letter", "word"]);
 export type TapeMode = z.infer<typeof TapeModeSchema>;
@@ -289,8 +315,8 @@ export const FunboxNameSchema = z.enum([
   "gibberish",
   "ascii",
   "specials",
-  "plus_one",
   "plus_zero",
+  "plus_one",
   "plus_two",
   "plus_three",
   "read_ahead_easy",
@@ -360,11 +386,11 @@ export type MaxLineWidth = z.infer<typeof MaxLineWidthSchema>;
 
 export const CustomBackgroundSchema = z
   .string()
-  .url("Needs to be an URI.")
-  .regex(/^(https|http):\/\/.*/, "Unsupported protocol.")
-  .regex(/^[^`'"]*$/, "May not contain quotes.")
-  .regex(/.+(\.png|\.gif|\.jpeg|\.jpg|\.webp)/gi, "Unsupported image format.")
-  .max(2048, "URL is too long.")
+  .url("Needs to be an URI")
+  .regex(/^(https|http):\/\/.*/, "Unsupported protocol")
+  .regex(/^[^`'"]*$/, "May not contain quotes")
+  .regex(/.+(\.png|\.gif|\.jpeg|\.jpg|\.webp)/gi, "Unsupported image format")
+  .max(2048, "URL is too long")
   .or(z.literal(""));
 export type CustomBackground = z.infer<typeof CustomBackgroundSchema>;
 
@@ -391,6 +417,7 @@ export const ConfigSchema = z
     difficulty: DifficultySchema,
     quickRestart: QuickRestartSchema,
     repeatQuotes: RepeatQuotesSchema,
+    resultSaving: z.boolean(),
     blindMode: z.boolean(),
     alwaysShowWordsHistory: z.boolean(),
     singleListCommandLine: SingleListCommandLineSchema,
@@ -410,6 +437,7 @@ export const ConfigSchema = z
     strictSpace: z.boolean(),
     oppositeShiftMode: OppositeShiftModeSchema,
     stopOnError: StopOnErrorSchema,
+    deleteOnError: DeleteOnErrorSchema,
     confidenceMode: ConfidenceModeSchema,
     quickEnd: z.boolean(),
     indicateTypos: IndicateTyposSchema,
@@ -441,6 +469,7 @@ export const ConfigSchema = z
     timerColor: TimerColorSchema,
     timerOpacity: TimerOpacitySchema,
     highlightMode: HighlightModeSchema,
+    typedEffect: TypedEffectSchema,
     tapeMode: TapeModeSchema,
     tapeMargin: TapeMarginSchema,
     smoothLineScroll: z.boolean(),
@@ -455,7 +484,7 @@ export const ConfigSchema = z
     keymapLayout: KeymapLayoutSchema,
     keymapStyle: KeymapStyleSchema,
     keymapLegendStyle: KeymapLegendStyleSchema,
-    keymapShowTopRow: KeymapShowTopRowSchema,
+    keymapKeys: KeymapKeysSchema,
     keymapSize: KeymapSizeSchema,
 
     // theme
